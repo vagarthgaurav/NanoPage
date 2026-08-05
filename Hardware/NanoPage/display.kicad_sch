@@ -3549,7 +3549,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Personal library:NR4018"
+		(property "Footprint" "Personal Library:NR4018"
 			(at 91.44 96.52 0)
 			(hide yes)
 			(show_name no)
@@ -4108,7 +4108,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Personal library:XUNPU FPC-05FB-24PH20"
+		(property "Footprint" "Personal Library:XUNPU FPC-05FB-24PH20"
 			(at 222.25 101.6 0)
 			(hide yes)
 			(show_name no)

@@ -4343,7 +4343,7 @@
 				)
 			)
 		)
-		(property "Footprint" "TPS2116:SOTFL50P160X60-8N"
+		(property "Footprint" "TPS2116DRL:SOTFL50P160X60-8N"
 			(at 121.92 52.07 0)
 			(hide yes)
 			(show_name no)
@@ -5383,7 +5383,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Personal library:L_CommonModeChoke_TDK_0503USB"
+		(property "Footprint" "Personal Library:L_CommonModeChoke_TDK_0503USB"
 			(at 170.18 156.21 0)
 			(hide yes)
 			(show_name no)

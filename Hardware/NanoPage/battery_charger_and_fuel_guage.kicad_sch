@@ -3211,7 +3211,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Personal library:BQ25170"
+		(property "Footprint" "Personal Library:BQ25170"
 			(at 64.77 100.33 0)
 			(hide yes)
 			(show_name no)
@@ -3311,7 +3311,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SM02B-SRSS-TB(LF)(SN):SM02BSRSSTBLFSN"
+		(property "Footprint" "SM02B-SRSS-TB:SM02BSRSSTBLFSN"
 			(at 251.46 192.71 0)
 			(hide yes)
 			(show_name no)
@@ -3770,7 +3770,7 @@
 				)
 			)
 		)
-		(property "Footprint" "MAX17055ETB+T:SON40P250X200X80-11N"
+		(property "Footprint" "MAX17055ETB-T:SON40P250X200X80-11N"
 			(at 175.26 182.55 0)
 			(hide yes)
 			(show_name no)

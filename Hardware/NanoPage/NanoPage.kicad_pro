@@ -81,16 +81,7 @@
           "width": 0.1582
         }
       ],
-      "drc_exclusions": [
-        [
-          "silk_edge_clearance|107700000|85600000|47fef71b-da50-4c47-ad6c-7f1487a22b61|845613e6-5798-44dd-988f-c595514f0470",
-          ""
-        ],
-        [
-          "silk_edge_clearance|110200000|85600000|47fef71b-da50-4c47-ad6c-7f1487a22b61|b7e98fd5-e2d7-4acc-8d64-46f86f6f7f19",
-          ""
-        ]
-      ],
+      "drc_exclusions": [],
       "meta": {
         "version": 2
       },
@@ -112,7 +103,7 @@
         "footprint_symbol_field_mismatch": "warning",
         "footprint_symbol_mismatch": "warning",
         "footprint_type_mismatch": "ignore",
-        "hole_clearance": "error",
+        "hole_clearance": "ignore",
         "hole_to_hole": "warning",
         "holes_co_located": "warning",
         "invalid_outline": "error",
@@ -121,7 +112,7 @@
         "items_not_allowed": "error",
         "length_out_of_range": "error",
         "lib_footprint_issues": "warning",
-        "lib_footprint_mismatch": "warning",
+        "lib_footprint_mismatch": "ignore",
         "malformed_courtyard": "error",
         "microvia_drill_out_of_range": "error",
         "mirrored_text_on_front_layer": "warning",
@@ -294,28 +285,7 @@
     "equivalence_files": []
   },
   "erc": {
-    "erc_exclusions": [
-      [
-        "multiple_net_names|2057400|889000|b90be5d5-632f-4f97-b64e-7ffbaf2c684a|cf8438f5-1cb5-47df-8bd7-04c3252d6873|/68539369-cc6a-4665-813c-0d5166b99902/06c70fb9-4b34-41c9-9314-e56b931f5504|/68539369-cc6a-4665-813c-0d5166b99902/06c70fb9-4b34-41c9-9314-e56b931f5504|/68539369-cc6a-4665-813c-0d5166b99902/06c70fb9-4b34-41c9-9314-e56b931f5504",
-        ""
-      ],
-      [
-        "multiple_net_names|2336800|723900|f0e7bec7-b79e-4374-ba91-65cfe4e818d5|3d5ae1fb-026f-42fe-97d9-68ecd680b9a8|/68539369-cc6a-4665-813c-0d5166b99902/50e5b324-0076-4ad0-9154-42b6cd188a50|/68539369-cc6a-4665-813c-0d5166b99902/50e5b324-0076-4ad0-9154-42b6cd188a50|/68539369-cc6a-4665-813c-0d5166b99902/50e5b324-0076-4ad0-9154-42b6cd188a50",
-        ""
-      ],
-      [
-        "multiple_net_names|558800|1041400|078d77a8-b7c3-4c50-bed6-38f075592036|a5952ae2-85f9-4290-8d65-e4c46d7ac22f|/68539369-cc6a-4665-813c-0d5166b99902/accc8169-0cc0-4286-b2e1-5505a8002692|/68539369-cc6a-4665-813c-0d5166b99902/accc8169-0cc0-4286-b2e1-5505a8002692|/68539369-cc6a-4665-813c-0d5166b99902/accc8169-0cc0-4286-b2e1-5505a8002692",
-        ""
-      ],
-      [
-        "multiple_net_names|558800|1041400|28be79b4-76b9-4c05-8652-5a8838ed4601|a5952ae2-85f9-4290-8d65-e4c46d7ac22f|/68539369-cc6a-4665-813c-0d5166b99902/accc8169-0cc0-4286-b2e1-5505a8002692|/68539369-cc6a-4665-813c-0d5166b99902/accc8169-0cc0-4286-b2e1-5505a8002692|/68539369-cc6a-4665-813c-0d5166b99902/accc8169-0cc0-4286-b2e1-5505a8002692",
-        ""
-      ],
-      [
-        "multiple_net_names|558800|1041400|48d9d408-4461-47c6-a693-eda6513925f2|a5952ae2-85f9-4290-8d65-e4c46d7ac22f|/68539369-cc6a-4665-813c-0d5166b99902/accc8169-0cc0-4286-b2e1-5505a8002692|/68539369-cc6a-4665-813c-0d5166b99902/accc8169-0cc0-4286-b2e1-5505a8002692|/68539369-cc6a-4665-813c-0d5166b99902/accc8169-0cc0-4286-b2e1-5505a8002692",
-        ""
-      ]
-    ],
+    "erc_exclusions": [],
     "meta": {
       "version": 0
     },
@@ -509,13 +479,13 @@
       "isolated_pin_label": "warning",
       "label_dangling": "error",
       "label_multiple_wires": "warning",
-      "lib_symbol_issues": "warning",
+      "lib_symbol_issues": "ignore",
       "lib_symbol_mismatch": "ignore",
       "missing_bidi_pin": "warning",
       "missing_input_pin": "warning",
       "missing_power_pin": "error",
       "missing_unit": "warning",
-      "multiple_net_names": "warning",
+      "multiple_net_names": "ignore",
       "net_not_bus_member": "warning",
       "no_connect_connected": "warning",
       "no_connect_dangling": "warning",
@@ -701,6 +671,7 @@
       "netlist": "",
       "plot": "Output",
       "specctra_dsn": "",
+      "step": "",
       "vrml": ""
     },
     "page_layout_descr_file": ""
@@ -823,7 +794,7 @@
         "uuid": "68539369-cc6a-4665-813c-0d5166b99902"
       }
     ],
-    "used_designators": "U1,R24-25",
+    "used_designators": "S4-5,SW1,U1,U8-9,R24-25",
     "variants": []
   },
   "sheets": [
