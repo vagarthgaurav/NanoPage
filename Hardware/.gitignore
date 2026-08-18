@@ -41,3 +41,5 @@ fp-info-cache
 **/.DS_Store
 
 **/*.zip
+
+**/Output/*
