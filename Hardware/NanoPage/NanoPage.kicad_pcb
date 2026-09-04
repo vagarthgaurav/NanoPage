@@ -6079,7 +6079,7 @@
 				)
 			)
 		)
-		(property "Value" "Conn_01x07"
+		(property "Value" "ext_buttons_conn"
 			(at 0 4.2 0)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -6121,6 +6121,12 @@
 		(path "/20439980-b9da-4cd5-8a60-cd2eb8439889/9fa2ad05-b939-4d15-9301-c61075811b6d")
 		(sheetname "/Buttons/")
 		(sheetfile "buttons.kicad_sch")
+		(units
+			(unit
+				(name "A")
+				(pins "1" "2" "3" "4" "5" "6" "7")
+			)
+		)
 		(attr smd)
 		(duplicate_pad_numbers_are_jumpers no)
 		(fp_line
@@ -12169,7 +12175,7 @@
 				(pins "1" "3" "2" "4")
 			)
 		)
-		(attr smd)
+		(attr smd dnp)
 		(duplicate_pad_numbers_are_jumpers no)
 		(fp_line
 			(start -4 -1.85)
@@ -13586,7 +13592,7 @@
 				)
 			)
 		)
-		(property "Value" "100k"
+		(property "Value" "10k"
 			(at 0 1.17 0)
 			(layer "F.Fab")
 			(uuid "50764399-7007-4ca2-9061-85a68fc1ad9d")
@@ -23476,7 +23482,7 @@
 			(extension_offset 0.5)
 			(keep_text_aligned yes)
 		)
-		(gr_text "3.5"
+		(gr_text "3,5"
 			(at 191.45 78.55 0)
 			(layer "Dwgs.User")
 			(uuid "38e6365f-48e2-44e9-9f36-5274daa83ce2")
@@ -23552,7 +23558,7 @@
 			(extension_offset 0.5)
 			(keep_text_aligned yes)
 		)
-		(gr_text "21.5"
+		(gr_text "21,5"
 			(at 205.75 104.25 90)
 			(layer "Dwgs.User")
 			(uuid "89207baa-5e13-4ebc-a944-a7bb86627574")
@@ -23590,7 +23596,7 @@
 			(extension_offset 0.5)
 			(keep_text_aligned yes)
 		)
-		(gr_text "37.5"
+		(gr_text "37,5"
 			(at 90.15 104.25 90)
 			(layer "Dwgs.User")
 			(uuid "a9716f41-5e44-4930-8172-c10d86937fc9")
@@ -23628,7 +23634,7 @@
 			(extension_offset 0.5)
 			(keep_text_aligned yes)
 		)
-		(gr_text "91.8"
+		(gr_text "91,8"
 			(at 147.29997 73.7976 0)
 			(layer "Dwgs.User")
 			(uuid "ea6f70ab-72f7-42ce-a133-4c04d14be6fe")
