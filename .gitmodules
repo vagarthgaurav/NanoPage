@@ -1,0 +1,4 @@
+[submodule "Firmware/Adafruit_nRF52_Bootloader"]
+	path = Firmware/Adafruit_nRF52_Bootloader
+	url = git@github.com:vagarthgaurav/Adafruit_nRF52_Bootloader.git
+	branch = nanopage
