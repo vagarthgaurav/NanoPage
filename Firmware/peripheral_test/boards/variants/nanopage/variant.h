@@ -30,6 +30,17 @@ extern "C"
 // need this to compile even though nothing on this board uses them.
 #define LED_STATE_ON 1
 
+// Likewise no LED_BUILTIN/LED_BLUE - but Adafruit's InternalFileSystem
+// (pulled in transitively by Bluefruit for BLE bond storage) calls
+// ledOn(LED_BUILTIN) unconditionally, and Bluefruit itself unconditionally
+// references LED_BLUE for its connection-status blink, so both macros
+// still have to exist to compile. Point them past PINS_COUNT:
+// pinMode()/digitalWrite() bounds-check against PINS_COUNT and silently
+// no-op for an out-of-range pin, so neither can glitch a real, wired-up
+// GPIO if either code path actually runs.
+#define LED_BUILTIN PINS_COUNT
+#define LED_BLUE (PINS_COUNT + 1)
+
 // I2C bus shared by the RTC (PCF85063ATL) and fuel gauge (MAX17055)
 #define PIN_WIRE_SDA (1) // P1.13
 #define PIN_WIRE_SCL (0) // P0.28

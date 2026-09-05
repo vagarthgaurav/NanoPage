@@ -1,12 +1,14 @@
 /*
  * NanoPage peripheral bring-up test.
  *
- * Exercises every peripheral on the board except the microSD card:
+ * Exercises every peripheral on the board:
  *   - PCF85063ATL RTC (I2C 0x51)
  *   - MAX17055 fuel gauge (I2C 0x36)
  *   - BQ25170 Li-Po charger (status/power-good GPIOs, no I2C)
  *   - Action / Next / Prev tactile buttons
  *   - GDEY029T94 e-paper panel (SSD1680, SPI)
+ *   - microSD card (SPI, shared bus with the panel via its own CS)
+ *   - nRF52840 BLE radio (S140 SoftDevice), central-role scan only
  *
  * Prints an I2C bus scan and chip identification once at boot. After that,
  * the RTC/fuel-gauge/charger/USB peripherals are only read right before a
@@ -25,12 +27,23 @@
  *     (oscillator-stop) flag is set, i.e. it's never been set before.
  *   - Runs the MAX17055's EZ Config sequence if its POR flag is set.
  *     FUEL_DESIGN_CAPACITY_MAH below must match the battery in use.
+ *   - Mounts the microSD card and lists the first SD_MAX_LISTED root
+ *     directory entries, once - the card isn't expected to change
+ *     contents mid-test, so this isn't re-scanned on every redraw.
+ *   - Starts a BLE central scan once; unlike the SD listing this keeps
+ *     running continuously in the background (SoftDevice-driven, not
+ *     polled from loop()), and bleScanCallback() fills in BLE_MAX_LISTED
+ *     peers as their advertisements arrive - but only ones that actually
+ *     advertise a name (many phones/earbuds don't, for privacy), so the
+ *     display only ever shows devices it can label. updateDisplayStatus()
+ *     just draws whatever's been found so far at the next redraw.
  *
- * The e-paper panel shows a live RTC/fuel-gauge/charger/USB snapshot,
+ * The e-paper panel shows a live RTC/fuel-gauge/microSD/BLE snapshot,
  * redrawn (full refresh, ~1.75s) every DISPLAY_UPDATE_MS in loop() -
  * deliberately slow, since e-paper shouldn't be driven with frequent
  * full refreshes; that same cadence now doubles as the peripheral
- * sampling rate.
+ * sampling rate. Charger/USB status is still logged to Serial on every
+ * redraw, just no longer drawn on the panel (traded for SD/BLE listing space).
  */
 
 #include <Arduino.h>
@@ -38,6 +51,8 @@
 #include <SPI.h>
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
+#include <SdFat.h>
+#include <bluefruit.h>
 #include <string.h>
 
 // ---- PCF85063ATL RTC -------------------------------------------------
@@ -82,6 +97,30 @@ static const uint16_t FUEL_VRECOVERY_MV = 3880;
 // the nRF52840, no need for GxEPD2's paged/partial-buffer drawing.
 GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::HEIGHT> display(
     GxEPD2_290_GDEY029T94(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
+
+// ---- microSD card -------------------------------------------------------
+SdFat sd;
+static const uint8_t SD_MAX_LISTED = 5;
+static bool sdOk = false;
+static uint8_t sdEntryCount = 0;
+static char sdEntryNames[SD_MAX_LISTED][40];
+static bool sdEntryIsDir[SD_MAX_LISTED];
+
+// ---- BLE central scan (radio bring-up test) -----------------------------
+struct BleDevice
+{
+  uint8_t addr[6];
+  char name[24];
+  int8_t rssi;
+};
+static const uint8_t BLE_MAX_LISTED = 3;
+// Written from the SoftDevice's BLE event task (bleScanCallback), read from
+// the main loop()/setup() task inside updateDisplayStatus() - like inputs[]
+// below, there's no mutex around this on a test firmware this size, just a
+// volatile count so the reader never sees more entries than are fully
+// written (each entry is filled in before the count that exposes it).
+static volatile uint8_t bleDeviceCount = 0;
+static BleDevice bleDevices[BLE_MAX_LISTED];
 
 struct DebouncedInput
 {
@@ -342,11 +381,156 @@ static void initDisplay()
   display.setRotation(3); // landscape, flipped 180 from the panel's native orientation
 }
 
+// One-time microSD bring-up: power the card (TPS22929D load switch),
+// mount the filesystem, and cache the first SD_MAX_LISTED root directory
+// entries for updateDisplayStatus() to draw - see the file header comment
+// for why this isn't re-scanned on every redraw.
+static void initSdAndListRoot()
+{
+  digitalWrite(PIN_SD_ON, HIGH); // power the card up (was left off by initDisplay())
+  delay(10);                     // let its supply rail settle before talking SPI
+
+  Serial.println(F("SD: initializing microSD card..."));
+  sdOk = sd.begin(SdSpiConfig(PIN_SD_CS, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+  if (!sdOk)
+  {
+    Serial.println(F("SD: card NOT found / init failed - check card is inserted and wiring"));
+    return;
+  }
+
+  Serial.print(F("SD: card present, "));
+  sd.printFatType(&Serial);
+  Serial.print(F(" volume, "));
+  Serial.print((uint32_t)(sd.card()->sectorCount() / 2048UL)); // 512B sectors -> MiB
+  Serial.println(F(" MB"));
+
+  File root = sd.open("/");
+  if (!root)
+  {
+    Serial.println(F("SD: failed to open root directory"));
+    return;
+  }
+
+  Serial.print(F("SD: root directory (first "));
+  Serial.print(SD_MAX_LISTED);
+  Serial.println(F(" entries):"));
+  File entry;
+  while (sdEntryCount < SD_MAX_LISTED && (entry = root.openNextFile()))
+  {
+    entry.getName(sdEntryNames[sdEntryCount], sizeof(sdEntryNames[sdEntryCount]));
+    sdEntryIsDir[sdEntryCount] = entry.isDirectory();
+    Serial.print(sdEntryIsDir[sdEntryCount] ? F("  [DIR]  ") : F("  [FILE] "));
+    Serial.println(sdEntryNames[sdEntryCount]);
+    entry.close();
+    sdEntryCount++;
+  }
+  root.close();
+  if (sdEntryCount == 0)
+    Serial.println(F("  (empty, or card unformatted)"));
+}
+
+static int8_t bleFindIndex(const uint8_t addr[6])
+{
+  for (uint8_t i = 0; i < bleDeviceCount; i++)
+    if (memcmp(bleDevices[i].addr, addr, 6) == 0)
+      return (int8_t)i;
+  return -1;
+}
+
+// Tries to pull a name out of one advertising report into buf. A device's
+// name usually isn't in its primary advertisement - it shows up in the
+// scan-response packet that arrives as a separate, later report for the
+// same address (that's why useActiveScan() is on below). Returns true and
+// null-terminates buf iff this particular report carried one.
+static bool bleParseName(ble_gap_evt_adv_report_t *report, char *buf, size_t bufSize)
+{
+  uint8_t len = Bluefruit.Scanner.parseReportByType(
+      report, BLE_GAP_AD_TYPE_COMPLETE_LOCAL_NAME, (uint8_t *)buf, bufSize - 1);
+  if (len == 0)
+    len = Bluefruit.Scanner.parseReportByType(
+        report, BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME, (uint8_t *)buf, bufSize - 1);
+  buf[len] = '\0';
+  return len > 0;
+}
+
+// Fires from the SoftDevice's BLE event task for every advertising and
+// scan-response report received. Logs each one to Serial, but only ever
+// caches a device once a report actually carries its name - devices that
+// never advertise one (common on phones, for privacy) are logged but
+// never take one of the BLE_MAX_LISTED display slots. Scanning is never
+// stopped, even once the cap is hit: new addresses are simply ignored
+// from then on, which is simpler than restarting the scan later.
+static void bleScanCallback(ble_gap_evt_adv_report_t *report)
+{
+  Serial.print(F("BLE: "));
+  Serial.printBufferReverse(report->peer_addr.addr, 6, ':');
+  Serial.print(F("  RSSI "));
+  Serial.print(report->rssi);
+
+  int8_t idx = bleFindIndex(report->peer_addr.addr);
+  if (idx >= 0)
+  {
+    bleDevices[idx].rssi = report->rssi;
+  }
+  else if (bleDeviceCount < BLE_MAX_LISTED)
+  {
+    char name[sizeof(BleDevice::name)];
+    if (bleParseName(report, name, sizeof(name)))
+    {
+      idx = (int8_t)bleDeviceCount;
+      memcpy(bleDevices[idx].addr, report->peer_addr.addr, 6);
+      strcpy(bleDevices[idx].name, name);
+      bleDevices[idx].rssi = report->rssi;
+      bleDeviceCount++; // last: readers key off this to know dev[] is valid
+
+      Serial.print(F("  \""));
+      Serial.print(bleDevices[idx].name);
+      Serial.print(F("\" -> added ("));
+      Serial.print(bleDeviceCount);
+      Serial.print('/');
+      Serial.print(BLE_MAX_LISTED);
+      Serial.print(')');
+    }
+  }
+  Serial.println();
+
+  Bluefruit.Scanner.resume(); // S140 pauses the scanner after each report
+}
+
+// One-time BLE bring-up: starts a central scan that runs continuously in
+// the background (SoftDevice-driven) rather than blocking here - see
+// bleScanCallback(). It's never stopped, so devices found after the
+// BLE_MAX_LISTED cap just get ignored, and the cached ones keep getting
+// their RSSI/name updated from later reports.
+static void initBleScan()
+{
+  Serial.println(F("BLE: starting central scan..."));
+  Bluefruit.begin(0, 1); // Peripheral=0, Central=1 - scanning only, no GATT server
+  Bluefruit.setTxPower(4);
+  Bluefruit.setName("NanoPage");
+
+  Bluefruit.Scanner.setRxCallback(bleScanCallback);
+  Bluefruit.Scanner.useActiveScan(true); // request scan responses, so names come through
+  Bluefruit.Scanner.start(0);            // 0 = no timeout, keep scanning until the cap is hit
+}
+
 static void printTwoDigits(Print &out, uint8_t v)
 {
   if (v < 10)
     out.print('0');
   out.print(v);
+}
+
+// SD and BLE now share the panel's width as two side-by-side columns (see
+// updateDisplayStatus()), so long names are clipped instead of overlapping
+// the neighboring column.
+static void printTruncated(Print &out, const char *s, uint8_t maxChars)
+{
+  uint8_t n = strlen(s);
+  if (n > maxChars)
+    n = maxChars;
+  for (uint8_t i = 0; i < n; i++)
+    out.print(s[i]);
 }
 
 // Defined below - forward-declared so updateDisplayStatus() can log the
@@ -369,12 +553,16 @@ static void updateDisplayStatus()
                 max17055ReadReg(FUEL_REG_CURRENT, &currentRaw);
   bool powerGood = digitalRead(PIN_CHG_PG) == LOW;
   bool charging = digitalRead(PIN_CHG_STAT) == LOW;
-  bool usbSelected = digitalRead(PIN_USB_DETECT) == HIGH;
 
   Serial.println(F("--- status ---"));
   printRtcStatus(rtcRegs, rtcOk);
   printFuelGaugeStatus(vcellRaw, socRaw, currentRaw, fuelOk);
   printChargerStatus(powerGood, charging);
+  Serial.print(F("  BLE: "));
+  Serial.print(bleDeviceCount);
+  Serial.print('/');
+  Serial.print(BLE_MAX_LISTED);
+  Serial.println(F(" devices cached"));
 
   display.setFullWindow();
   display.firstPage();
@@ -433,15 +621,59 @@ static void updateDisplayStatus()
       display.print(F("not found"));
     y += lineHeight;
 
-    display.setCursor(4, y);
-    display.print(F("Chg  "));
-    display.print(powerGood ? F("pwr ") : F("no-pwr "));
-    display.print(charging ? F("charging") : F("idle"));
-    y += lineHeight;
+    // SD (left column) and BLE (right column) share this row downward -
+    // both lists start at the same y so neither one's height affects the
+    // other's position, and printTruncated() keeps long names from
+    // crossing into the neighboring column.
+    const int16_t col2X = 150;
+    const uint8_t nameMaxChars = 20;
+    uint8_t bleCount = bleDeviceCount; // snapshot - can change under us mid-draw
 
     display.setCursor(4, y);
-    display.print(F("USB  "));
-    display.print(usbSelected ? F("connected") : F("on battery"));
+    display.print(F("SD   "));
+    if (!sdOk)
+      display.print(F("not found"));
+    else if (sdEntryCount == 0)
+      display.print(F("root empty"));
+    else
+    {
+      display.print(sdEntryCount);
+      display.print(F(" entries:"));
+    }
+
+    display.setCursor(col2X, y);
+    display.print(F("BLE  "));
+    if (bleCount == 0)
+      display.print(F("scanning..."));
+    else
+    {
+      display.print(bleCount);
+      display.print(F("/"));
+      display.print(BLE_MAX_LISTED);
+    }
+    y += lineHeight;
+
+    int16_t sdY = y;
+    if (sdOk)
+    {
+      for (uint8_t i = 0; i < sdEntryCount; i++)
+      {
+        display.setCursor(4, sdY);
+        display.print(sdEntryIsDir[i] ? F("[D] ") : F("[F] "));
+        printTruncated(display, sdEntryNames[i], nameMaxChars);
+        sdY += lineHeight;
+      }
+    }
+
+    int16_t bleY = y;
+    for (uint8_t i = 0; i < bleCount; i++)
+    {
+      display.setCursor(col2X, bleY);
+      display.print(i + 1);
+      display.print(' ');
+      printTruncated(display, bleDevices[i].name, nameMaxChars);
+      bleY += lineHeight;
+    }
   } while (display.nextPage());
 
   display.hibernate();
@@ -597,6 +829,8 @@ void setup()
   seedRtcFromCompileTimeIfNeeded();
   initFuelGaugeIfNeeded();
   initDisplay();
+  initSdAndListRoot();
+  initBleScan();
   updateDisplayStatus();
   Serial.println(F("Display: refresh done, panel hibernated."));
   Serial.println(F("Press PREV/ACTION/NEXT to test buttons - edges report immediately."));
