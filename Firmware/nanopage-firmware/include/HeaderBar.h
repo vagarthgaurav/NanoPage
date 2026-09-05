@@ -1,4 +1,4 @@
-// Top-of-screen header bar UI - currently just the battery indicator.
+// Top-of-screen header bar UI - battery indicator plus an optional left-aligned label.
 
 #pragma once
 
@@ -10,5 +10,5 @@ namespace HeaderBar
 {
     constexpr int16_t HEIGHT = 16; // includes the bottom rule
 
-    void draw(Display &display, uint8_t batteryPercent, bool charging);
+    void draw(Display &display, uint8_t batteryPercent, bool charging, const char *label = nullptr);
 } // namespace HeaderBar
