@@ -23,6 +23,8 @@ static uint8_t lastPercent = 255;
 static bool lastCharging = false;
 static uint8_t refreshCount = 0;
 
+static volatile uint32_t lastActivityMs = 0;
+
 // refreshFull() clears the whole panel, so a full refresh must redraw both regions.
 static void drawHeaderAndContent()
 {
@@ -84,6 +86,7 @@ static void redrawFileBrowser(bool includeHeader = false)
 
 static void onPrevEdge()
 {
+    lastActivityMs = millis();
     xSemaphoreTake(displayMutex, portMAX_DELAY);
     fileBrowser.prev();
     redrawFileBrowser();
@@ -92,6 +95,7 @@ static void onPrevEdge()
 
 static void onNextEdge()
 {
+    lastActivityMs = millis();
     xSemaphoreTake(displayMutex, portMAX_DELAY);
     fileBrowser.next();
     redrawFileBrowser();
@@ -100,10 +104,51 @@ static void onNextEdge()
 
 static void onActionEdge()
 {
+    lastActivityMs = millis();
     xSemaphoreTake(displayMutex, portMAX_DELAY);
     if (fileBrowser.activateSelected())
         redrawFileBrowser(/*includeHeader=*/true);
     xSemaphoreGive(displayMutex);
+}
+
+static void drawSleepIcon()
+{
+    auto &gfx = display.panel();
+    int16_t cx = gfx.width() / 2;
+    int16_t cy = gfx.height() / 2 - 14;
+    int16_t r = 18;
+
+    gfx.fillCircle(cx, cy, r, GxEPD_BLACK);
+    gfx.fillCircle(cx + r / 2, cy - r / 3, r, GxEPD_WHITE); // bites a crescent out of the disc
+
+    auto &fonts = display.fonts();
+    fonts.setFont(u8g2_font_10x20_tr);
+    const char *caption = "NanoPage";
+    int16_t textW = fonts.getUTF8Width(caption);
+    fonts.setCursor(cx - textW / 2, cy + r + 24);
+    fonts.print(caption);
+}
+
+// Waking from SYSTEMOFF is a full reset - resumes at setup(), not here.
+static void enterDeepSleep()
+{
+    Serial.println("No activity - entering deep sleep");
+    Serial.flush();
+
+    xSemaphoreTake(displayMutex, portMAX_DELAY);
+    display.refreshFull(drawSleepIcon);
+
+    digitalWrite(PIN_SD_ON, LOW);
+    digitalWrite(PIN_SD_CS, HIGH);
+    Wire.end();
+
+    pinMode(PIN_BTN_PREV, INPUT_PULLUP_SENSE);
+    pinMode(PIN_BTN_NEXT, INPUT_PULLUP_SENSE);
+    pinMode(PIN_BTN_ACTION, INPUT_PULLUP_SENSE);
+
+    delay(50); // let SPI/GPIO changes settle before cutting power
+    NRF_POWER->SYSTEMOFF = POWER_SYSTEMOFF_SYSTEMOFF_Enter;
+    while (true) {} // fallback - SYSTEMOFF should cut power before this ever runs
 }
 
 void setup()
@@ -143,10 +188,22 @@ void setup()
     xSemaphoreTake(displayMutex, portMAX_DELAY);
     redrawFileBrowser();
     xSemaphoreGive(displayMutex);
+
+    lastActivityMs = millis();
 }
 
 void loop()
 {
-    delay(Config::FUEL_GAUGE_POLL_INTERVAL_MS); // lets FreeRTOS tickless idle sleep instead of busy-polling
-    redrawHeader();
+    static uint32_t lastFuelGaugePoll = 0;
+    delay(1000); // lets FreeRTOS tickless idle sleep instead of busy-polling
+
+    uint32_t now = millis();
+    if (now - lastFuelGaugePoll >= Config::FUEL_GAUGE_POLL_INTERVAL_MS)
+    {
+        lastFuelGaugePoll = now;
+        redrawHeader();
+    }
+
+    if (now - lastActivityMs >= Config::SLEEP_TIMEOUT_MS)
+        enterDeepSleep();
 }
