@@ -4,10 +4,12 @@
 #include <Adafruit_TinyUSB.h> // pulls in the USB CDC Serial object; nothing links it in otherwise
 #include <Wire.h>
 #include <semphr.h>
+#include <utility/debug.h> // dbgHeapFree() - malloc-backed heap on this core, not FreeRTOS's
 
 #include "Config.h"
 #include "Display.h"
 #include "FileBrowser.h"
+#include "FooterBar.h"
 #include "FuelGauge.h"
 #include "HeaderBar.h"
 
@@ -21,21 +23,31 @@ static SemaphoreHandle_t displayMutex;
 // Sentinels guarantee the first call always draws.
 static uint8_t lastPercent = 255;
 static bool lastCharging = false;
+static float lastCurrentMa = 0.0f;
+static float lastVoltageMv = 0.0f;
+static int16_t lastFooterCurrentRounded = INT16_MIN;
+static int16_t lastFooterVoltageCentiV = -1;
+static int32_t lastFooterHeapKb = -1;
 static uint8_t refreshCount = 0;
 
 static volatile uint32_t lastActivityMs = 0;
 
-// refreshFull() clears the whole panel, so a full refresh must redraw both regions.
+static int16_t roundToInt16(float v)
+{
+    return (int16_t)(v >= 0 ? v + 0.5f : v - 0.5f);
+}
+
+// refreshFull() clears the whole panel, so a full refresh must redraw all three regions.
 static void drawHeaderAndContent()
 {
     HeaderBar::draw(display, lastPercent, lastCharging, fileBrowser.currentPath());
     fileBrowser.draw(display);
+    FooterBar::draw(display, lastCurrentMa, lastVoltageMv, (uint32_t)dbgHeapFree());
 }
 
 static void redrawHeader(bool force = false)
 {
     uint8_t percent = (uint8_t)fuelGauge.percent();
-    float currentMa = fuelGauge.currentMilliAmps();
     bool charging = fuelGauge.isCharging();
 
     if (!force && percent == lastPercent && charging == lastCharging)
@@ -47,9 +59,7 @@ static void redrawHeader(bool force = false)
 
     Serial.print("Fuel gauge: ");
     Serial.print(percent);
-    Serial.print("%, ");
-    Serial.print(currentMa);
-    Serial.print("mA, charging=");
+    Serial.print("%, charging=");
     Serial.println(charging ? "true" : "false");
 
     bool full = refreshCount % Config::FULL_REFRESH_EVERY == 0;
@@ -58,6 +68,43 @@ static void redrawHeader(bool force = false)
     else
         display.refreshPartial(0, 0, display.panel().width(), HeaderBar::HEIGHT, [&]()
                                 { HeaderBar::draw(display, percent, charging, fileBrowser.currentPath()); });
+    refreshCount++;
+    xSemaphoreGive(displayMutex);
+}
+
+// Separate entity from the header - only touches the panel when its own readings
+// (current/voltage/free heap, at the precision they're actually displayed) change.
+static void redrawFooter(bool force = false)
+{
+    float currentMa = fuelGauge.currentMilliAmps();
+    float voltageMv = fuelGauge.voltageMilliVolts();
+    uint32_t freeHeap = (uint32_t)dbgHeapFree();
+
+    int16_t currentRounded = roundToInt16(currentMa);
+    int16_t voltageCentiV = roundToInt16(voltageMv / 10.0f);
+    int32_t heapKb = (int32_t)(freeHeap / 1024);
+
+    if (!force && currentRounded == lastFooterCurrentRounded && voltageCentiV == lastFooterVoltageCentiV && heapKb == lastFooterHeapKb)
+        return; // nothing changed - skip the e-paper refresh entirely
+
+    xSemaphoreTake(displayMutex, portMAX_DELAY);
+    lastFooterCurrentRounded = currentRounded;
+    lastFooterVoltageCentiV = voltageCentiV;
+    lastFooterHeapKb = heapKb;
+    lastCurrentMa = currentMa; // used by drawHeaderAndContent() on a full refresh
+    lastVoltageMv = voltageMv;
+
+    bool full = refreshCount % Config::FULL_REFRESH_EVERY == 0;
+    if (full)
+    {
+        display.refreshFull(drawHeaderAndContent);
+    }
+    else
+    {
+        int16_t footerY = display.panel().height() - FooterBar::HEIGHT;
+        display.refreshPartial(0, footerY, display.panel().width(), FooterBar::HEIGHT, [&]()
+                                { FooterBar::draw(display, currentMa, voltageMv, freeHeap); });
+    }
     refreshCount++;
     xSemaphoreGive(displayMutex);
 }
@@ -77,7 +124,7 @@ static void redrawFileBrowser(bool includeHeader = false)
     else
     {
         int16_t y = HeaderBar::HEIGHT;
-        int16_t h = display.panel().height() - y;
+        int16_t h = display.panel().height() - FooterBar::HEIGHT - y;
         display.refreshPartial(0, y, display.panel().width(), h, [&]()
                                 { fileBrowser.draw(display); });
     }
@@ -184,9 +231,19 @@ void setup()
     if (!fileBrowser.begin())
         Serial.println("SD card: not found");
 
-    redrawHeader();
+    // Prime all "last drawn" state from real readings before the first paint, so the
+    // initial full refresh doesn't show stale sentinels for a moment.
+    lastPercent = (uint8_t)fuelGauge.percent();
+    lastCharging = fuelGauge.isCharging();
+    lastCurrentMa = fuelGauge.currentMilliAmps();
+    lastVoltageMv = fuelGauge.voltageMilliVolts();
+    lastFooterCurrentRounded = roundToInt16(lastCurrentMa);
+    lastFooterVoltageCentiV = roundToInt16(lastVoltageMv / 10.0f);
+    lastFooterHeapKb = (int32_t)(dbgHeapFree() / 1024);
+
     xSemaphoreTake(displayMutex, portMAX_DELAY);
-    redrawFileBrowser();
+    display.refreshFull(drawHeaderAndContent);
+    refreshCount++;
     xSemaphoreGive(displayMutex);
 
     lastActivityMs = millis();
@@ -202,6 +259,7 @@ void loop()
     {
         lastFuelGaugePoll = now;
         redrawHeader();
+        redrawFooter();
     }
 
     if (now - lastActivityMs >= Config::SLEEP_TIMEOUT_MS)

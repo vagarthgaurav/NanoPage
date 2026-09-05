@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "Display.h"
+#include "FooterBar.h"
 #include "HeaderBar.h"
 
 namespace
@@ -135,7 +136,7 @@ void FileBrowser::draw(Display &display)
     auto &fonts = display.fonts();
 
     int16_t contentY = HeaderBar::HEIGHT + TOP_PADDING;
-    int16_t contentH = gfx.height() - contentY;
+    int16_t contentH = gfx.height() - FooterBar::HEIGHT - contentY;
     uint8_t rowsVisible = (uint8_t)(contentH / ROW_HEIGHT);
 
     ensureVisible(rowsVisible);
