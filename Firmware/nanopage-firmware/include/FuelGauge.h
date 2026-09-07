@@ -32,9 +32,11 @@ private:
     static constexpr uint8_t REG_VCELL = 0x09;     // 78.125uV/LSB
     static constexpr uint8_t REG_CURRENT = 0x0A;   // signed, 1.5625uV/RSENSE per LSB
     static constexpr uint8_t REG_DESIGNCAP = 0x18; // 5.0uVh/RSENSE per LSB
-    static constexpr uint8_t REG_MODELCFG = 0x1D;
     static constexpr uint8_t REG_ICHGTERM = 0x1E; // same LSB as Current
+    static constexpr uint8_t REG_DQACC = 0x45;
+    static constexpr uint8_t REG_DPACC = 0x46;
     static constexpr uint8_t REG_VEMPTY = 0x3A;
+    static constexpr uint8_t REG_MODELCFG = 0xDB;
     static constexpr uint8_t REG_FSTAT = 0x3D; // bit0 = DNR
     static constexpr uint8_t REG_HIBCFG = 0xBA;
     static constexpr uint8_t REG_COMMAND = 0x60;

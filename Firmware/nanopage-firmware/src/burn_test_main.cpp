@@ -9,6 +9,7 @@
 #include <SPI.h>
 #include <SdFat.h>
 #include <Wire.h>
+#include <math.h>
 
 #include "Display.h"
 #include "FuelGauge.h"
@@ -27,10 +28,11 @@ namespace
     Display display;
     SdFat sd;
     bool sdMounted = false;
-    bool stopped = false;
+    bool haltLoad = false; // sticky once true - low-voltage floor or a completed charge, either way stop for good
+    bool wasCharging = false;
     uint8_t scratch[WRITE_CHUNK_BYTES];
 
-    void drawStatus(uint32_t elapsedS, float percent, float mv, float ma)
+    void drawStatus(uint32_t elapsedS, float percent, float mv, float ma, float peakMa, uint32_t tookMs)
     {
         auto &fonts = display.fonts();
         fonts.setFont(u8g2_font_10x20_tr);
@@ -40,43 +42,76 @@ namespace
         fonts.setFont(u8g2_font_6x10_tr);
         char line[40];
         snprintf(line, sizeof(line), "elapsed  %lus", (unsigned long)elapsedS);
-        fonts.setCursor(4, 60);
+        fonts.setCursor(4, 50);
         fonts.print(line);
         snprintf(line, sizeof(line), "SOC      %.1f%%", percent);
-        fonts.setCursor(4, 74);
+        fonts.setCursor(4, 64);
         fonts.print(line);
         snprintf(line, sizeof(line), "voltage  %.0fmV", mv);
-        fonts.setCursor(4, 88);
+        fonts.setCursor(4, 78);
         fonts.print(line);
-        snprintf(line, sizeof(line), "current  %.1fmA", ma);
-        fonts.setCursor(4, 102);
+        snprintf(line, sizeof(line), "I after  %.1fmA", ma);
+        fonts.setCursor(4, 92);
+        fonts.print(line);
+        snprintf(line, sizeof(line), "I peak   %.1fmA", peakMa);
+        fonts.setCursor(4, 106);
+        fonts.print(line);
+        snprintf(line, sizeof(line), "SD took  %lums", (unsigned long)tookMs);
+        fonts.setCursor(4, 120);
         fonts.print(line);
     }
 
     // Repeated write+read+delete of a scratch file keeps the card's flash
     // controller active, which is where most of an SD card's current goes.
-    void hammerSdCard()
+    // Samples current mid-transfer too, since a single post-hoc read can miss
+    // the actual load if the card is slow enough that most loop time is idle.
+    // Returns {peak |current| seen, wall-clock ms spent}.
+    void hammerSdCard(float &peakMa, uint32_t &tookMs)
     {
+        peakMa = 0.0f;
+        uint32_t startMs = millis();
         if (!sdMounted)
+        {
+            tookMs = 0;
             return;
+        }
+
+        auto sample = [&]()
+        {
+            float ma = fabsf(fuelGauge.currentMilliAmps());
+            if (ma > peakMa)
+                peakMa = ma;
+        };
 
         File f = sd.open("/burn.bin", O_WRITE | O_CREAT | O_TRUNC);
         if (f)
         {
             for (uint32_t i = 0; i < WRITE_CHUNK_COUNT; i++)
+            {
                 f.write(scratch, sizeof(scratch));
+                if (i % 64 == 0)
+                    sample();
+            }
             f.close();
         }
+        sample();
 
         File fr = sd.open("/burn.bin", O_READ);
         if (fr)
         {
+            uint32_t i = 0;
             while (fr.available())
+            {
                 fr.read(scratch, sizeof(scratch));
+                if (i++ % 64 == 0)
+                    sample();
+            }
             fr.close();
         }
+        sample();
 
         sd.remove("/burn.bin");
+        tookMs = millis() - startMs;
     }
 } // namespace
 
@@ -120,31 +155,63 @@ void loop()
     static uint32_t lastLogMs = 0;
 
     float mv = fuelGauge.voltageMilliVolts();
+    float percent = fuelGauge.percent();
+    float ma = fuelGauge.currentMilliAmps();
+    bool charging = fuelGauge.isCharging();
+    uint32_t elapsedS = (millis() - startMs) / 1000;
 
-    // No PCM on this cell and the BQ25170 has no under-voltage cutoff of its own -
-    // stop drawing extra current ourselves once the cell reaches its safe floor.
-    if (mv <= SAFE_STOP_MV)
+    // A charge-completion edge (was charging, now not, at a real full-charge
+    // voltage) means the learning cycle is done - stop for good so we don't
+    // silently kick off another discharge the user didn't ask for.
+    if (wasCharging && !charging && mv > 4000.0f && !haltLoad)
     {
-        if (!stopped)
+        haltLoad = true;
+        Serial.println("CYCLE COMPLETE: charge tapered off after a full discharge/charge cycle.");
+        Serial.println("Reflash normal firmware with `pio run -e nanopage -t upload` and check the SOC reading.");
+    }
+    wasCharging = charging;
+
+    // No PCM check needed here (the pack has one), but the BQ25170 has no
+    // under-voltage cutoff of its own - stop drawing extra current ourselves
+    // once the cell reaches its safe floor.
+    if (!haltLoad && mv <= SAFE_STOP_MV)
+    {
+        haltLoad = true;
+        digitalWrite(PIN_SD_ON, LOW); // cut every avoidable mA once we're at the floor
+        Serial.print("SAFE STOP: cell reached ");
+        Serial.print(mv);
+        Serial.println("mV - halting load to protect the battery. Recharge it now.");
+    }
+
+    // Never add load while the charger is trying to reach a clean, tapering
+    // full charge - that's the signal the fuel gauge needs to re-anchor to 100%.
+    if (haltLoad || charging)
+    {
+        uint32_t now = millis();
+        if (now - lastLogMs >= LOG_INTERVAL_MS)
         {
-            stopped = true;
-            digitalWrite(PIN_SD_ON, LOW); // cut every avoidable mA once we're at the floor
-            Serial.print("SAFE STOP: cell reached ");
+            lastLogMs = now;
+            Serial.print(elapsedS);
+            Serial.print("s  (idle, charging=");
+            Serial.print(charging ? "true" : "false");
+            Serial.print(")  SOC=");
+            Serial.print(percent);
+            Serial.print("%  V=");
             Serial.print(mv);
-            Serial.println("mV - halting load to protect the battery. Recharge it now.");
+            Serial.print("mV  I=");
+            Serial.print(ma);
+            Serial.println("mA");
         }
-        delay(5000);
+        delay(2000);
         return;
     }
 
-    hammerSdCard();
-
-    uint32_t elapsedS = (millis() - startMs) / 1000;
-    float percent = fuelGauge.percent();
-    float ma = fuelGauge.currentMilliAmps();
+    float peakMa = 0.0f;
+    uint32_t tookMs = 0;
+    hammerSdCard(peakMa, tookMs);
 
     display.refreshFull([&]()
-                         { drawStatus(elapsedS, percent, mv, ma); });
+                         { drawStatus(elapsedS, percent, mv, ma, peakMa, tookMs); });
 
     uint32_t now = millis();
     if (now - lastLogMs >= LOG_INTERVAL_MS)
@@ -155,8 +222,12 @@ void loop()
         Serial.print(percent);
         Serial.print("%  V=");
         Serial.print(mv);
-        Serial.print("mV  I=");
+        Serial.print("mV  I(after)=");
         Serial.print(ma);
-        Serial.println("mA");
+        Serial.print("mA  I(peak during SD)=");
+        Serial.print(peakMa);
+        Serial.print("mA  SD hammer took=");
+        Serial.print(tookMs);
+        Serial.println("ms");
     }
 }

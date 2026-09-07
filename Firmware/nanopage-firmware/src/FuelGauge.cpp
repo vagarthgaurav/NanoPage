@@ -53,9 +53,17 @@ void FuelGauge::runEzConfigIfNeeded()
     uint16_t ichgTermReg = (uint16_t)(ichgTermMa / CURRENT_MA_PER_LSB + 0.5f);
     uint16_t vEmptyReg = ((VEMPTY_MV / 10) << 7) | (VRECOVERY_MV / 40);
 
+    // dQAcc/dPAcc scale FullCapNom to this pack's DesignCap - required by Maxim's
+    // EZ Config sequence (UG6365 3.1) alongside DesignCap/IChgTerm/VEmpty, and
+    // previously missing here, which left full-charge capacity tracking unset.
+    uint16_t dqAccReg = designCapReg / 32;
+    uint16_t dpAccReg = (uint16_t)(((uint32_t)dqAccReg * 44138UL) / designCapReg); // charge voltage <=4.275V
+
     writeReg(REG_DESIGNCAP, designCapReg);
+    writeReg(REG_DQACC, dqAccReg);
     writeReg(REG_ICHGTERM, ichgTermReg);
     writeReg(REG_VEMPTY, vEmptyReg);
+    writeReg(REG_DPACC, dpAccReg);
     writeReg(REG_MODELCFG, 0x8000); // Refresh=1, default Li-ion model
 
     uint16_t modelCfg = 0x8000;
