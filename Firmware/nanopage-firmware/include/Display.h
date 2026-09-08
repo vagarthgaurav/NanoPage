@@ -32,6 +32,10 @@ public:
 
     // Fast partial update (~400ms vs ~1.75s for a full refresh on this
     // panel) - only pushes the given rect, so draw() must fully repaint it.
+    // Unused for now: on this board it corrupts pixels beyond the redrawn
+    // rect from the very first call, not just after repeated ghosting - see
+    // main.cpp's redraw*() functions, which always go through refreshFull()
+    // instead. Left in place for whenever that gets root-caused.
     template <typename DrawFn>
     void refreshPartial(int16_t x, int16_t y, int16_t w, int16_t h, DrawFn draw)
     {

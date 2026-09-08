@@ -130,6 +130,66 @@ void FileBrowser::ensureVisible(uint8_t rowsVisible)
         scrollTop_ = selected_ - rowsVisible + 1;
 }
 
+void FileBrowser::drawSelectionDelta(Display &display, uint8_t previousSelected)
+{
+    auto &gfx = display.panel();
+    auto &fonts = display.fonts();
+
+    int16_t contentY = HeaderBar::HEIGHT + TOP_PADDING;
+    int16_t contentH = gfx.height() - FooterBar::HEIGHT - contentY;
+    uint8_t rowsVisible = (uint8_t)(contentH / ROW_HEIGHT);
+
+    uint8_t previousScrollTop = scrollTop_;
+    ensureVisible(rowsVisible); // may move scrollTop_ to keep the new selected_ in view
+
+    if (scrollTop_ != previousScrollTop)
+    {
+        // The visible page shifted - every row's content changed, not just the
+        // arrow - but it's still just the content area, not the whole panel.
+        display.refreshPartial(0, HeaderBar::HEIGHT, gfx.width(), contentH + TOP_PADDING, [&]()
+                                { draw(display); });
+        return;
+    }
+
+    // previousSelected and selected_ are both still on screen, and (since prev()/next()
+    // only move by one row) adjacent.
+    int16_t oldRow = previousSelected - scrollTop_;
+    int16_t newRow = selected_ - scrollTop_;
+    int16_t topRow = oldRow < newRow ? oldRow : newRow;
+    int16_t rowSpan = (oldRow > newRow ? oldRow : newRow) - topRow + 1;
+
+    // One extra row of margin above and below, clamped to the visible page - the
+    // cursor/folder-file glyphs are custom bitmap fonts that can render outside
+    // their reported advance width/height, which left slivers uncleared right at
+    // the edge of a tightly-sized window. Cheaper than pinning down their exact
+    // pixel bounds, and redraws (not blanks) whatever falls in the margin rows.
+    int16_t clearTopRow = topRow > 0 ? topRow - 1 : 0;
+    int16_t clearRowSpan = (topRow + rowSpan + 1) - clearTopRow;
+    if (clearTopRow + clearRowSpan > rowsVisible)
+        clearRowSpan = rowsVisible - clearTopRow;
+
+    int16_t y = contentY + clearTopRow * ROW_HEIGHT;
+    int16_t h = clearRowSpan * ROW_HEIGHT;
+
+    // Covers both the cursor arrow and the folder/file icon next to it, not just
+    // the tight gap between them, for the same reason as the vertical margin above.
+    // Redraws the type icon too (even though it doesn't change) so nothing between
+    // the two, or in the margin rows, gets left half-cleared.
+    display.refreshPartial(0, y, TEXT_COL_X, h, [&]()
+                            {
+        fonts.setFont(u8g2_font_siji_t_6x10);
+        for (int16_t row = clearTopRow; row < clearTopRow + clearRowSpan; row++)
+        {
+            uint8_t idx = scrollTop_ + row;
+            if (idx >= entryCount_)
+                break;
+            int16_t baseline = contentY + row * ROW_HEIGHT + centeredBaseline(fonts, ROW_HEIGHT);
+            if (idx == selected_)
+                fonts.drawGlyph(CURSOR_COL_X, baseline, ICON_CURSOR);
+            fonts.drawGlyph(ICON_COL_X, baseline, entries_[idx].isDir ? ICON_FOLDER : ICON_FILE);
+        } });
+}
+
 void FileBrowser::draw(Display &display)
 {
     auto &gfx = display.panel();

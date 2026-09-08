@@ -24,6 +24,14 @@ public:
 
     void draw(Display &display);
 
+    uint8_t selectedIndex() const { return selected_; }
+
+    // Redraws just what changed after a prev()/next() move of exactly one row -
+    // use instead of a full draw() when only the selection changed. Normally just
+    // the cursor arrow; if the move scrolled the visible window, the whole content
+    // area instead (still a partial refresh, not a full panel one).
+    void drawSelectionDelta(Display &display, uint8_t previousSelected);
+
     const char *currentPath() const { return path_; }
 
 private:

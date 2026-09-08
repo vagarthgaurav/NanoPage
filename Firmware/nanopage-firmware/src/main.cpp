@@ -88,13 +88,25 @@ static float lastVoltageMv = 0.0f;
 static int16_t lastFooterCurrentRounded = INT16_MIN;
 static int16_t lastFooterVoltageCentiV = -1;
 static int32_t lastFooterHeapKb = -1;
-static uint8_t refreshCount = 0;
+static uint16_t partialRefreshCount = 0;
 
 static volatile uint32_t lastActivityMs = 0;
 
 static int16_t roundToInt16(float v)
 {
     return (int16_t)(v >= 0 ? v + 0.5f : v - 0.5f);
+}
+
+// Shared across every narrow partial-refresh call site below (header, footer,
+// cursor move) - fast partial updates ghost over time, so this forces a full
+// clear periodically regardless of which region asks. Every candidate partial
+// refresh counts, whichever region it's for.
+static bool dueForFullRefresh()
+{
+    bool due = partialRefreshCount++ % Config::FULL_REFRESH_EVERY == 0;
+    if (due)
+        Serial.println("Periodic full refresh (ghosting clear)");
+    return due;
 }
 
 // refreshFull() clears the whole panel, so a full refresh must redraw all three regions.
@@ -122,13 +134,17 @@ static void redrawHeader(bool force = false)
     Serial.print("%, charging=");
     Serial.println(charging ? "true" : "false");
 
-    bool full = refreshCount % Config::FULL_REFRESH_EVERY == 0;
-    if (full)
+    if (dueForFullRefresh())
+    {
         display.refreshFull(drawHeaderAndContent);
+    }
     else
-        display.refreshPartial(0, 0, display.panel().width(), HeaderBar::HEIGHT, [&]()
-                                { HeaderBar::draw(display, percent, charging, fileBrowser.currentPath()); });
-    refreshCount++;
+    {
+        int16_t x, y, w, h;
+        HeaderBar::batteryClusterRect(display, x, y, w, h);
+        display.refreshPartial(x, y, w, h, [&]()
+                                { HeaderBar::drawBatteryCluster(display, percent, charging); });
+    }
     xSemaphoreGive(displayMutex);
 }
 
@@ -144,69 +160,77 @@ static void redrawFooter(bool force = false)
     int16_t voltageCentiV = roundToInt16(voltageMv / 10.0f);
     int32_t heapKb = (int32_t)(freeHeap / 1024);
 
-    if (!force && currentRounded == lastFooterCurrentRounded && voltageCentiV == lastFooterVoltageCentiV && heapKb == lastFooterHeapKb)
+    bool statsChanged = force || currentRounded != lastFooterCurrentRounded || voltageCentiV != lastFooterVoltageCentiV;
+    bool heapChanged = force || heapKb != lastFooterHeapKb;
+    if (!statsChanged && !heapChanged)
         return; // nothing changed - skip the e-paper refresh entirely
 
     xSemaphoreTake(displayMutex, portMAX_DELAY);
     lastFooterCurrentRounded = currentRounded;
     lastFooterVoltageCentiV = voltageCentiV;
     lastFooterHeapKb = heapKb;
-    lastCurrentMa = currentMa; // used by drawHeaderAndContent() on a full refresh
+    lastCurrentMa = currentMa; // used by drawHeaderAndContent()
     lastVoltageMv = voltageMv;
 
-    bool full = refreshCount % Config::FULL_REFRESH_EVERY == 0;
-    if (full)
+    if (dueForFullRefresh())
     {
         display.refreshFull(drawHeaderAndContent);
     }
     else
     {
-        int16_t footerY = display.panel().height() - FooterBar::HEIGHT;
-        display.refreshPartial(0, footerY, display.panel().width(), FooterBar::HEIGHT, [&]()
-                                { FooterBar::draw(display, currentMa, voltageMv, freeHeap); });
+        int16_t x, y, w, h;
+        if (statsChanged)
+        {
+            FooterBar::statsRect(display, x, y, w, h);
+            display.refreshPartial(x, y, w, h, [&]()
+                                    { FooterBar::drawStats(display, currentMa, voltageMv); });
+        }
+        if (heapChanged)
+        {
+            FooterBar::heapRect(display, x, y, w, h);
+            display.refreshPartial(x, y, w, h, [&]()
+                                    { FooterBar::drawHeap(display, freeHeap); });
+        }
     }
-    refreshCount++;
     xSemaphoreGive(displayMutex);
 }
 
-// includeHeader also redraws the header's path label. Caller must hold displayMutex.
-static void redrawFileBrowser(bool includeHeader = false)
+// Caller must hold displayMutex.
+static void redrawFileBrowser()
 {
-    bool full = refreshCount % Config::FULL_REFRESH_EVERY == 0;
-    if (full)
+    display.refreshFull(drawHeaderAndContent);
+}
+
+// Moves the selection by calling moveFn, then redraws just what changed - the
+// cursor arrow, or the whole content area if the move scrolled the visible
+// page - unless a periodic full refresh is due instead (see dueForFullRefresh()).
+template <typename MoveFn>
+static void moveSelectionAndRedraw(MoveFn moveFn)
+{
+    lastActivityMs = millis();
+    xSemaphoreTake(displayMutex, portMAX_DELAY);
+    uint8_t previousSelected = fileBrowser.selectedIndex();
+    moveFn();
+    if (fileBrowser.selectedIndex() != previousSelected)
     {
-        display.refreshFull(drawHeaderAndContent);
+        if (dueForFullRefresh())
+            redrawFileBrowser();
+        else
+            fileBrowser.drawSelectionDelta(display, previousSelected);
     }
-    else if (includeHeader)
-    {
-        display.refreshPartial(0, 0, display.panel().width(), display.panel().height(), drawHeaderAndContent);
-    }
-    else
-    {
-        int16_t y = HeaderBar::HEIGHT;
-        int16_t h = display.panel().height() - FooterBar::HEIGHT - y;
-        display.refreshPartial(0, y, display.panel().width(), h, [&]()
-                                { fileBrowser.draw(display); });
-    }
-    refreshCount++;
+    xSemaphoreGive(displayMutex);
 }
 
 static void onPrevEdge()
 {
-    lastActivityMs = millis();
-    xSemaphoreTake(displayMutex, portMAX_DELAY);
-    fileBrowser.prev();
-    redrawFileBrowser();
-    xSemaphoreGive(displayMutex);
+    moveSelectionAndRedraw([]()
+                            { fileBrowser.prev(); });
 }
 
 static void onNextEdge()
 {
-    lastActivityMs = millis();
-    xSemaphoreTake(displayMutex, portMAX_DELAY);
-    fileBrowser.next();
-    redrawFileBrowser();
-    xSemaphoreGive(displayMutex);
+    moveSelectionAndRedraw([]()
+                            { fileBrowser.next(); });
 }
 
 static void onActionEdge()
@@ -214,7 +238,7 @@ static void onActionEdge()
     lastActivityMs = millis();
     xSemaphoreTake(displayMutex, portMAX_DELAY);
     if (fileBrowser.activateSelected())
-        redrawFileBrowser(/*includeHeader=*/true);
+        redrawFileBrowser();
     xSemaphoreGive(displayMutex);
 }
 
@@ -316,7 +340,6 @@ void setup()
 
     xSemaphoreTake(displayMutex, portMAX_DELAY);
     display.refreshFull(drawHeaderAndContent);
-    refreshCount++;
     xSemaphoreGive(displayMutex);
 
     lastActivityMs = millis();
