@@ -90,11 +90,24 @@ static int16_t lastFooterVoltageCentiV = -1;
 static int32_t lastFooterHeapKb = -1;
 static uint16_t partialRefreshCount = 0;
 
+// Shared with the fuel-gauge ALRT handler below, which resets this on a serviced
+// alert so the fallback poll timer counts from the last real update either way.
+static uint32_t lastFuelGaugePoll = 0;
+
 static volatile uint32_t lastActivityMs = 0;
 
 static int16_t roundToInt16(float v)
 {
     return (int16_t)(v >= 0 ? v + 0.5f : v - 0.5f);
+}
+
+// BQ25170 STAT, not the fuel gauge's current reading: charge current ramps up/down
+// over a couple of seconds around plug/unplug, so a current-threshold test lags the
+// physical event by a few seconds in both directions. STAT reflects the charger's
+// own state and flips within its internal debounce time.
+static bool chargerActive()
+{
+    return digitalRead(PIN_CHG_STAT) == LOW;
 }
 
 // Shared across every narrow partial-refresh call site below (header, footer,
@@ -120,7 +133,7 @@ static void drawHeaderAndContent()
 static void redrawHeader(bool force = false)
 {
     uint8_t percent = (uint8_t)fuelGauge.percent();
-    bool charging = fuelGauge.isCharging();
+    bool charging = chargerActive();
 
     if (!force && percent == lastPercent && charging == lastCharging)
         return; // nothing changed - skip the e-paper refresh entirely
@@ -242,6 +255,24 @@ static void onActionEdge()
     xSemaphoreGive(displayMutex);
 }
 
+// MAX17055 ALRT - fires on every ~1% RepSOC change (see FuelGauge::enableSocChangeAlert).
+// Open-drain/active-low, so ALRT stays asserted until the status flag is cleared.
+static void onFuelGaugeAlertEdge()
+{
+    fuelGauge.clearSocChangeAlert();
+    lastFuelGaugePoll = millis(); // fallback poll now counts from this real update
+    redrawHeader();
+    redrawFooter();
+}
+
+// BQ25170 STAT - fires the instant charging starts or stops (USB plugged in,
+// unplugged, or charge complete), independent of the fuel gauge's own current
+// reading (see chargerActive()).
+static void onChargerStatusChangeEdge()
+{
+    redrawHeader();
+}
+
 static void drawSleepIcon()
 {
     auto &gfx = display.panel();
@@ -322,6 +353,12 @@ void setup()
     attachInterrupt(PIN_BTN_NEXT, onNextEdge, FALLING | ISR_DEFERRED);
     attachInterrupt(PIN_BTN_ACTION, onActionEdge, FALLING | ISR_DEFERRED);
 
+    pinMode(PIN_FUEL_ALERT, INPUT_PULLUP); // open-drain, active low
+    attachInterrupt(PIN_FUEL_ALERT, onFuelGaugeAlertEdge, FALLING | ISR_DEFERRED);
+
+    pinMode(PIN_CHG_STAT, INPUT); // open-drain, external pull-up already on board
+    attachInterrupt(PIN_CHG_STAT, onChargerStatusChangeEdge, CHANGE | ISR_DEFERRED);
+
     display.begin();
 
     // Only FileBrowser is wired up so far - see PageMode.h.
@@ -331,7 +368,7 @@ void setup()
     // Prime all "last drawn" state from real readings before the first paint, so the
     // initial full refresh doesn't show stale sentinels for a moment.
     lastPercent = (uint8_t)fuelGauge.percent();
-    lastCharging = fuelGauge.isCharging();
+    lastCharging = chargerActive();
     lastCurrentMa = fuelGauge.currentMilliAmps();
     lastVoltageMv = fuelGauge.voltageMilliVolts();
     lastFooterCurrentRounded = roundToInt16(lastCurrentMa);
@@ -347,7 +384,6 @@ void setup()
 
 void loop()
 {
-    static uint32_t lastFuelGaugePoll = 0;
     static uint32_t lastFuelGaugeSave = 0;
     delay(1000); // lets FreeRTOS tickless idle sleep instead of busy-polling
 

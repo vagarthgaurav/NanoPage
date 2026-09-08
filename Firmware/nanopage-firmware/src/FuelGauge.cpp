@@ -133,7 +133,30 @@ bool FuelGauge::begin(const LearnedParams *saved)
     else
         runEzConfigIfNeeded(); // no-op if POR flag is already clear
 
+    enableSocChangeAlert();
+
     return true;
+}
+
+// Lets ALRT pulse low on every ~1% RepSOC step, so the caller can redraw on that
+// edge instead of only on its own poll timer. Read-modify-write so it doesn't
+// disturb other CONFIG/CONFIG2 bits (defaults, or ones a future feature sets).
+void FuelGauge::enableSocChangeAlert()
+{
+    uint16_t config = 0;
+    readReg(REG_CONFIG, config);
+    writeReg(REG_CONFIG, config | CONFIG_AEN);
+
+    uint16_t config2 = 0;
+    readReg(REG_CONFIG2, config2);
+    writeReg(REG_CONFIG2, config2 | CONFIG2_DSOCEN);
+}
+
+void FuelGauge::clearSocChangeAlert()
+{
+    uint16_t status = 0;
+    readReg(REG_STATUS, status);
+    writeReg(REG_STATUS, status & ~STATUS_DSOCI);
 }
 
 FuelGauge::LearnedParams FuelGauge::learnedParams()
@@ -169,9 +192,4 @@ float FuelGauge::currentMilliAmps()
     if (!readReg(REG_CURRENT, raw))
         return 0.0f;
     return (int16_t)raw * CURRENT_MA_PER_LSB;
-}
-
-bool FuelGauge::isCharging()
-{
-    return currentMilliAmps() > CHARGING_DEADBAND_MA;
 }
