@@ -23,15 +23,8 @@ bool FuelGauge::writeReg(uint8_t reg, uint16_t value)
     return wire_.endTransmission() == 0;
 }
 
-// MAX17055 "EZ Config" init (no OCV table), Maxim's documented POR sequence.
-void FuelGauge::runEzConfigIfNeeded()
+void FuelGauge::waitForPorRoutineDone()
 {
-    uint16_t status = 0;
-    if (!readReg(REG_STATUS, status))
-        return;
-    if (!(status & 0x0002))
-        return; // POR flag clear, already configured
-
     uint16_t fstat = 0;
     uint32_t waitStart = millis();
     do
@@ -41,6 +34,18 @@ void FuelGauge::runEzConfigIfNeeded()
             break;
         delay(10);
     } while (millis() - waitStart < 1000);
+}
+
+// MAX17055 "EZ Config" init (no OCV table), Maxim's documented POR sequence.
+void FuelGauge::runEzConfigIfNeeded()
+{
+    uint16_t status = 0;
+    if (!readReg(REG_STATUS, status))
+        return;
+    if (!(status & 0x0002))
+        return; // POR flag clear, already configured
+
+    waitForPorRoutineDone();
 
     uint16_t hibCfg = 0;
     readReg(REG_HIBCFG, hibCfg);
@@ -67,7 +72,7 @@ void FuelGauge::runEzConfigIfNeeded()
     writeReg(REG_MODELCFG, 0x8000); // Refresh=1, default Li-ion model
 
     uint16_t modelCfg = 0x8000;
-    waitStart = millis();
+    uint32_t waitStart = millis();
     do
     {
         readReg(REG_MODELCFG, modelCfg);
@@ -82,15 +87,64 @@ void FuelGauge::runEzConfigIfNeeded()
     writeReg(REG_STATUS, status & ~0x0002); // clear POR
 }
 
-bool FuelGauge::begin()
+// Reloads a previously-saved model snapshot instead of starting EZ Config from a
+// blank slate. Sequence per Maxim's MAX17055 Software Implementation Guide (UG6365),
+// sections 4.5-4.11 "Save learned parameters" / "Restoring capacity parameters".
+void FuelGauge::restoreLearnedParams(const LearnedParams &saved)
+{
+    waitForPorRoutineDone();
+
+    writeReg(REG_RCOMP0, saved.rcomp0);
+    writeReg(REG_TEMPCO, saved.tempCo);
+    writeReg(REG_FULLCAPNOM, saved.fullCapNom);
+    delay(350);
+
+    uint16_t mixSoc = 0;
+    uint16_t fullCapNomNow = 0;
+    readReg(REG_MIXSOC, mixSoc);
+    readReg(REG_FULLCAPNOM, fullCapNomNow); // re-read - may have shifted slightly during the wait
+    uint16_t mixCap = (uint16_t)(((uint32_t)mixSoc * fullCapNomNow) / 25600);
+    writeReg(REG_MIXCAP, mixCap);
+
+    writeReg(REG_FULLCAPREP, saved.fullCapRep);
+    // dQAcc/dPAcc reload uses the originally-saved FullCapNom, not the re-read one.
+    writeReg(REG_DPACC, 0x0C80);
+    writeReg(REG_DQACC, saved.fullCapNom / 16);
+    delay(350);
+
+    writeReg(REG_CYCLES, saved.cycles);
+
+    uint16_t status = 0;
+    readReg(REG_STATUS, status);
+    writeReg(REG_STATUS, status & ~0x0002); // clear POR
+}
+
+bool FuelGauge::begin(const LearnedParams *saved)
 {
     wire_.beginTransmission(ADDR);
     present_ = wire_.endTransmission() == 0;
     if (!present_)
         return false;
 
-    runEzConfigIfNeeded();
+    uint16_t status = 0;
+    bool porSet = readReg(REG_STATUS, status) && (status & 0x0002);
+    if (porSet && saved)
+        restoreLearnedParams(*saved);
+    else
+        runEzConfigIfNeeded(); // no-op if POR flag is already clear
+
     return true;
+}
+
+FuelGauge::LearnedParams FuelGauge::learnedParams()
+{
+    LearnedParams p;
+    readReg(REG_RCOMP0, p.rcomp0);
+    readReg(REG_TEMPCO, p.tempCo);
+    readReg(REG_FULLCAPNOM, p.fullCapNom);
+    readReg(REG_FULLCAPREP, p.fullCapRep);
+    readReg(REG_CYCLES, p.cycles);
+    return p;
 }
 
 float FuelGauge::percent()

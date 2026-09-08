@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_TinyUSB.h> // pulls in the USB CDC Serial object; nothing links it in otherwise
+#include <InternalFileSystem.h>
 #include <Wire.h>
 #include <semphr.h>
 #include <utility/debug.h> // dbgHeapFree() - malloc-backed heap on this core, not FreeRTOS's
@@ -16,6 +17,65 @@
 static FuelGauge fuelGauge;
 static Display display;
 static FileBrowser fileBrowser;
+
+namespace
+{
+    // Fuel-gauge learning lives only in the MAX17055's own registers - if the
+    // battery is ever unplugged it forgets everything. Mirroring it to internal
+    // flash lets us reload instead of relearning from a blank EZ Config.
+    constexpr const char *LEARNED_PARAMS_PATH = "/fuelgauge_learned.bin";
+
+    struct StoredLearnedParams
+    {
+        FuelGauge::LearnedParams params;
+        uint16_t checksum;
+    };
+
+    uint16_t checksumOf(const FuelGauge::LearnedParams &p)
+    {
+        uint16_t sum = 0;
+        const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&p);
+        for (size_t i = 0; i < sizeof(p); i++)
+            sum += bytes[i];
+        return sum;
+    }
+
+    bool loadLearnedParams(FuelGauge::LearnedParams &out)
+    {
+        using Adafruit_LittleFS_Namespace::FILE_O_READ;
+        Adafruit_LittleFS_Namespace::File f = InternalFS.open(LEARNED_PARAMS_PATH, FILE_O_READ);
+        if (!f)
+            return false;
+
+        StoredLearnedParams stored;
+        bool ok = f.read(&stored, sizeof(stored)) == (int)sizeof(stored);
+        f.close();
+        if (!ok || checksumOf(stored.params) != stored.checksum)
+            return false;
+        out = stored.params;
+        return true;
+    }
+
+    void saveLearnedParams(const FuelGauge::LearnedParams &p)
+    {
+        using Adafruit_LittleFS_Namespace::FILE_O_WRITE;
+        StoredLearnedParams stored{p, checksumOf(p)};
+        Adafruit_LittleFS_Namespace::File f = InternalFS.open(LEARNED_PARAMS_PATH, FILE_O_WRITE);
+        if (!f)
+            return;
+        f.write(reinterpret_cast<const uint8_t *>(&stored), sizeof(stored));
+        f.close();
+    }
+
+    // Reference snapshot from a calibrated board with the same EEMB LP402535 pack -
+    // seeds a brand-new chip (no flash save yet either) closer to correct than the
+    // generic built-in model, then normal use self-corrects it from there. See
+    // README.md "Fuel gauge factory seed" for where these values came from and how
+    // to recapture them on a new reference board.
+    // Order: rcomp0, tempCo, fullCapNom, fullCapRep, cycles.
+    constexpr FuelGauge::LearnedParams FACTORY_SEED = {0x0013, 0x223E, 0x02E6, 0x0280, 0x0013};
+    constexpr bool FACTORY_SEED_VALID = true;
+} // namespace
 
 // loop() and the button ISR_DEFERRED task both call into display/fileBrowser - guard against overlap.
 static SemaphoreHandle_t displayMutex;
@@ -185,6 +245,9 @@ static void enterDeepSleep()
     xSemaphoreTake(displayMutex, portMAX_DELAY);
     display.refreshFull(drawSleepIcon);
 
+    if (fuelGauge.present())
+        saveLearnedParams(fuelGauge.learnedParams());
+
     digitalWrite(PIN_SD_ON, LOW);
     digitalWrite(PIN_SD_CS, HIGH);
     Wire.end();
@@ -215,7 +278,17 @@ void setup()
     Wire.begin();
     Wire.setClock(100000);
 
-    if (!fuelGauge.begin())
+    InternalFS.begin();
+    FuelGauge::LearnedParams savedParams;
+    bool haveSavedParams = loadLearnedParams(savedParams);
+
+    const FuelGauge::LearnedParams *seed = nullptr;
+    if (haveSavedParams)
+        seed = &savedParams; // this exact chip's own history - always wins
+    else if (FACTORY_SEED_VALID)
+        seed = &FACTORY_SEED; // never configured before - a real reference cell beats a blank guess
+
+    if (!fuelGauge.begin(seed))
         Serial.println("Fuel gauge: not found at 0x36");
 
     pinMode(PIN_BTN_PREV, INPUT_PULLUP);
@@ -252,6 +325,7 @@ void setup()
 void loop()
 {
     static uint32_t lastFuelGaugePoll = 0;
+    static uint32_t lastFuelGaugeSave = 0;
     delay(1000); // lets FreeRTOS tickless idle sleep instead of busy-polling
 
     uint32_t now = millis();
@@ -260,6 +334,12 @@ void loop()
         lastFuelGaugePoll = now;
         redrawHeader();
         redrawFooter();
+    }
+
+    if (fuelGauge.present() && now - lastFuelGaugeSave >= Config::FUEL_GAUGE_SAVE_INTERVAL_MS)
+    {
+        lastFuelGaugeSave = now;
+        saveLearnedParams(fuelGauge.learnedParams());
     }
 
     if (now - lastActivityMs >= Config::SLEEP_TIMEOUT_MS)

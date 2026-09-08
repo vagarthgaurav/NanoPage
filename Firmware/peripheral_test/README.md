@@ -68,6 +68,33 @@ frequent full refreshes. SPI is shared with the microSD card, so the SD
 card's CS and power-enable pins are driven inactive once at startup so it
 can't contend with the display on the bus.
 
+## Battery burn test
+
+`platformio.ini` also defines `env:nanopage_burntest`, a separate build
+(`src/burn_test_main.cpp`) used only for MAX17055 fuel-gauge calibration -
+not needed for normal peripheral bring-up, and not built by default.
+
+```bash
+pio run -e nanopage_burntest -t upload
+pio device monitor
+```
+
+It hammers the SD card and e-paper panel continuously instead of sleeping,
+to discharge faster than idle current would allow, and prints
+`CYCLE COMPLETE` when a full discharge/charge cycle is detected (or
+`SAFE STOP` if the cell hits the low-voltage cutoff first - safe to stop
+there too). Reflash `env:nanopage` (or nanopage-firmware's own main
+firmware) afterward; this build never sleeps and isn't meant for normal
+use. See [../nanopage-firmware/README.md](../nanopage-firmware/README.md#fuel-gauge-factory-seed)
+for what the calibration data is used for.
+
+Uses `Display`/`FuelGauge` classes copied from `../nanopage-firmware`
+(`include/Display.h`, `include/FuelGauge.h`, `src/Display.cpp`,
+`src/FuelGauge.cpp`) rather than this project's usual raw-register style,
+since the burn test needs the same EZ-Config/current/voltage logic the
+main firmware uses. Not shared via a library - keep them in sync manually
+if either project's copy changes.
+
 ## Assumptions worth checking against real hardware
 
 - Buttons and the charger/RTC/fuel-gauge/USB-detect signal lines are all
