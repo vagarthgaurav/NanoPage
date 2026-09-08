@@ -110,6 +110,13 @@ static bool chargerActive()
     return digitalRead(PIN_CHG_STAT) == LOW;
 }
 
+// Diagnostic only (not wired into the UI yet) - distinguishes "no real input power"
+// (cable/port issue) from "charger genuinely terminated" while charging=false.
+static bool inputPowerGood()
+{
+    return digitalRead(PIN_CHG_PG) == LOW;
+}
+
 // Shared across every narrow partial-refresh call site below (header, footer,
 // cursor move) - fast partial updates ghost over time, so this forces a full
 // clear periodically regardless of which region asks. Every candidate partial
@@ -132,7 +139,7 @@ static void drawHeaderAndContent()
 
 static void redrawHeader(bool force = false)
 {
-    uint8_t percent = (uint8_t)fuelGauge.percent();
+    uint8_t percent = (uint8_t)(fuelGauge.percent() + 0.5f);
     bool charging = chargerActive();
 
     if (!force && percent == lastPercent && charging == lastCharging)
@@ -147,7 +154,12 @@ static void redrawHeader(bool force = false)
         Serial.print("Fuel gauge: ");
         Serial.print(percent);
         Serial.print("%, charging=");
-        Serial.println(charging ? "true" : "false");
+        Serial.print(charging ? "true" : "false");
+        Serial.print(", powerGood=");
+        Serial.print(inputPowerGood() ? "true" : "false");
+        Serial.print(", current=");
+        Serial.print(fuelGauge.currentMilliAmps());
+        Serial.println("mA");
     }
 
     if (dueForFullRefresh())
@@ -356,6 +368,23 @@ void setup()
 
     if (!fuelGauge.begin(seed) && Config::DEBUG_SERIAL)
         Serial.println("Fuel gauge: not found at 0x36");
+    else if (Config::DEBUG_SERIAL)
+    {
+        Serial.print("Fuel gauge: seed=");
+        Serial.println(haveSavedParams ? "flash" : (FACTORY_SEED_VALID ? "factory" : "none"));
+        fuelGauge.debugDumpRegisters();
+    }
+
+    if (Config::FORCE_FUELGAUGE_RECAL && fuelGauge.present())
+    {
+        fuelGauge.forceFullReinit(&FACTORY_SEED);
+        InternalFS.remove(LEARNED_PARAMS_PATH); // drop the corrupted snapshot, don't reload it later
+        if (Config::DEBUG_SERIAL)
+        {
+            Serial.println("Fuel gauge: forced restore from factory reference");
+            fuelGauge.debugDumpRegisters();
+        }
+    }
 
     pinMode(PIN_BTN_PREV, INPUT_PULLUP);
     pinMode(PIN_BTN_NEXT, INPUT_PULLUP);
@@ -367,8 +396,10 @@ void setup()
     pinMode(PIN_FUEL_ALERT, INPUT_PULLUP); // open-drain, active low
     attachInterrupt(PIN_FUEL_ALERT, onFuelGaugeAlertEdge, FALLING | ISR_DEFERRED);
 
-    pinMode(PIN_CHG_STAT, INPUT); // open-drain, external pull-up already on board
+    pinMode(PIN_CHG_STAT, INPUT_PULLUP); // open-drain - belt-and-suspenders, matches PIN_FUEL_ALERT below
     attachInterrupt(PIN_CHG_STAT, onChargerStatusChangeEdge, CHANGE | ISR_DEFERRED);
+
+    pinMode(PIN_CHG_PG, INPUT_PULLUP); // open-drain, diagnostic only for now (see inputPowerGood())
 
     display.begin();
 
@@ -378,7 +409,7 @@ void setup()
 
     // Prime all "last drawn" state from real readings before the first paint, so the
     // initial full refresh doesn't show stale sentinels for a moment.
-    lastPercent = (uint8_t)fuelGauge.percent();
+    lastPercent = (uint8_t)(fuelGauge.percent() + 0.5f);
     lastCharging = chargerActive();
     lastCurrentMa = fuelGauge.currentMilliAmps();
     lastVoltageMv = fuelGauge.voltageMilliVolts();

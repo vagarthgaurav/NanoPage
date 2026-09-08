@@ -72,6 +72,10 @@ private:
 
     bool readReg(uint8_t reg, uint16_t &out);
     bool writeReg(uint8_t reg, uint16_t value);
+    // Writes DesignCap/IChgTerm/VEmpty from this board's fixed pack spec (not
+    // learned per-chip state) - called unconditionally from begin() since
+    // restoreLearnedParams() deliberately doesn't touch these three.
+    void writeCapacityConfig();
     void runEzConfigIfNeeded();
     void restoreLearnedParams(const LearnedParams &saved);
     void waitForPorRoutineDone(); // FSTAT.DNR - shared by EZ Config and restore

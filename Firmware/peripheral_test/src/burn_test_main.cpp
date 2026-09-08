@@ -28,7 +28,8 @@ namespace
     Display display;
     SdFat sd;
     bool sdMounted = false;
-    bool haltLoad = false; // sticky once true - low-voltage floor or a completed charge, either way stop for good
+    bool depleted = false;      // sticky - SAFE STOP fired, never resume hammering
+    bool cycleComplete = false; // sticky - charge taper detected, separate from `depleted`
     bool wasCharging = false;
     uint8_t scratch[WRITE_CHUNK_BYTES];
 
@@ -59,6 +60,49 @@ namespace
         snprintf(line, sizeof(line), "SD took  %lums", (unsigned long)tookMs);
         fonts.setCursor(4, 120);
         fonts.print(line);
+    }
+
+    // Shared layout for the two terminal-event screens below - drawn once, right
+    // when each event fires, then left on screen (no more redraws follow in that
+    // phase, so there's nothing to refresh again).
+    void drawEventStatus(const char *title, uint32_t elapsedS, float percent, float mv)
+    {
+        auto &fonts = display.fonts();
+        fonts.setFont(u8g2_font_10x20_tr);
+        fonts.setCursor(4, 30);
+        fonts.print(title);
+
+        fonts.setFont(u8g2_font_6x10_tr);
+        char line[40];
+        snprintf(line, sizeof(line), "elapsed  %lus", (unsigned long)elapsedS);
+        fonts.setCursor(4, 50);
+        fonts.print(line);
+        snprintf(line, sizeof(line), "SOC      %.1f%%", percent);
+        fonts.setCursor(4, 64);
+        fonts.print(line);
+        snprintf(line, sizeof(line), "voltage  %.0fmV", mv);
+        fonts.setCursor(4, 78);
+        fonts.print(line);
+    }
+
+    void drawDepleted(uint32_t elapsedS, float percent, float mv)
+    {
+        drawEventStatus("DEPLETED", elapsedS, percent, mv);
+        auto &fonts = display.fonts();
+        fonts.setCursor(4, 92);
+        fonts.print("discharge done");
+        fonts.setCursor(4, 106);
+        fonts.print("recharge now");
+    }
+
+    void drawChargeComplete(uint32_t elapsedS, float percent, float mv)
+    {
+        drawEventStatus("CHARGED", elapsedS, percent, mv);
+        auto &fonts = display.fonts();
+        fonts.setCursor(4, 92);
+        fonts.print("cycle complete");
+        fonts.setCursor(4, 106);
+        fonts.print("reflash normal fw");
     }
 
     // Repeated write+read+delete of a scratch file keeps the card's flash
@@ -161,31 +205,37 @@ void loop()
     uint32_t elapsedS = (millis() - startMs) / 1000;
 
     // A charge-completion edge (was charging, now not, at a real full-charge
-    // voltage) means the learning cycle is done - stop for good so we don't
-    // silently kick off another discharge the user didn't ask for.
-    if (wasCharging && !charging && mv > 4000.0f && !haltLoad)
+    // voltage) means the learning cycle is done - stop hammering for good so we
+    // don't silently kick off another discharge the user didn't ask for. Gated
+    // only on its own sticky flag (not on `depleted`) so this can still fire
+    // after an earlier SAFE STOP - a full run normally hits both events in turn.
+    if (wasCharging && !charging && mv > 4000.0f && !cycleComplete)
     {
-        haltLoad = true;
+        cycleComplete = true;
         Serial.println("CYCLE COMPLETE: charge tapered off after a full discharge/charge cycle.");
         Serial.println("Reflash normal firmware with `pio run -e nanopage -t upload` and check the SOC reading.");
+        display.refreshFull([&]()
+                             { drawChargeComplete(elapsedS, percent, mv); });
     }
     wasCharging = charging;
 
     // No PCM check needed here (the pack has one), but the BQ25170 has no
     // under-voltage cutoff of its own - stop drawing extra current ourselves
     // once the cell reaches its safe floor.
-    if (!haltLoad && mv <= SAFE_STOP_MV)
+    if (!depleted && mv <= SAFE_STOP_MV)
     {
-        haltLoad = true;
+        depleted = true;
         digitalWrite(PIN_SD_ON, LOW); // cut every avoidable mA once we're at the floor
         Serial.print("SAFE STOP: cell reached ");
         Serial.print(mv);
         Serial.println("mV - halting load to protect the battery. Recharge it now.");
+        display.refreshFull([&]()
+                             { drawDepleted(elapsedS, percent, mv); });
     }
 
     // Never add load while the charger is trying to reach a clean, tapering
     // full charge - that's the signal the fuel gauge needs to re-anchor to 100%.
-    if (haltLoad || charging)
+    if (depleted || cycleComplete || charging)
     {
         uint32_t now = millis();
         if (now - lastLogMs >= LOG_INTERVAL_MS)

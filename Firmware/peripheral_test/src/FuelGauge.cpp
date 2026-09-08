@@ -36,6 +36,18 @@ void FuelGauge::waitForPorRoutineDone()
     } while (millis() - waitStart < 1000);
 }
 
+void FuelGauge::writeCapacityConfig()
+{
+    uint16_t designCapReg = (uint16_t)(DESIGN_CAPACITY_MAH / CAPACITY_MAH_PER_LSB + 0.5f);
+    float ichgTermMa = DESIGN_CAPACITY_MAH * 0.1f; // 0.1C termination current
+    uint16_t ichgTermReg = (uint16_t)(ichgTermMa / CURRENT_MA_PER_LSB + 0.5f);
+    uint16_t vEmptyReg = ((VEMPTY_MV / 10) << 7) | (VRECOVERY_MV / 40);
+
+    writeReg(REG_DESIGNCAP, designCapReg);
+    writeReg(REG_ICHGTERM, ichgTermReg);
+    writeReg(REG_VEMPTY, vEmptyReg);
+}
+
 // MAX17055 "EZ Config" init (no OCV table), Maxim's documented POR sequence.
 void FuelGauge::runEzConfigIfNeeded()
 {
@@ -53,10 +65,8 @@ void FuelGauge::runEzConfigIfNeeded()
     writeReg(REG_HIBCFG, 0x0);
     writeReg(REG_COMMAND, 0x0); // exit hibernate, step 3
 
+    // DesignCap/IChgTerm/VEmpty already (re)written unconditionally in begin().
     uint16_t designCapReg = (uint16_t)(DESIGN_CAPACITY_MAH / CAPACITY_MAH_PER_LSB + 0.5f);
-    float ichgTermMa = DESIGN_CAPACITY_MAH * 0.1f; // 0.1C termination current
-    uint16_t ichgTermReg = (uint16_t)(ichgTermMa / CURRENT_MA_PER_LSB + 0.5f);
-    uint16_t vEmptyReg = ((VEMPTY_MV / 10) << 7) | (VRECOVERY_MV / 40);
 
     // dQAcc/dPAcc scale FullCapNom to this pack's DesignCap - required by Maxim's
     // EZ Config sequence (UG6365 3.1) alongside DesignCap/IChgTerm/VEmpty, and
@@ -64,10 +74,7 @@ void FuelGauge::runEzConfigIfNeeded()
     uint16_t dqAccReg = designCapReg / 32;
     uint16_t dpAccReg = (uint16_t)(((uint32_t)dqAccReg * 44138UL) / designCapReg); // charge voltage <=4.275V
 
-    writeReg(REG_DESIGNCAP, designCapReg);
     writeReg(REG_DQACC, dqAccReg);
-    writeReg(REG_ICHGTERM, ichgTermReg);
-    writeReg(REG_VEMPTY, vEmptyReg);
     writeReg(REG_DPACC, dpAccReg);
     writeReg(REG_MODELCFG, 0x8000); // Refresh=1, default Li-ion model
 
@@ -128,6 +135,17 @@ bool FuelGauge::begin(const LearnedParams *saved)
 
     uint16_t status = 0;
     bool porSet = readReg(REG_STATUS, status) && (status & 0x0002);
+
+    // DesignCap/IChgTerm/VEmpty reflect this board's fixed pack spec, not learned
+    // per-chip history - keep them correct on every boot regardless of which path
+    // below runs. restoreLearnedParams() deliberately skips them (Maxim's restore
+    // procedure only covers the learned model params), so without this they can be
+    // left stale indefinitely - e.g. the chip's own POR defaults if a real power
+    // loss reset them and the saved-seed restore path ran afterward instead of a
+    // fresh EZ Config. (Ported from nanopage-firmware's FuelGauge - see
+    // project_fuelgauge_ez_config_calibration memory for how this was found.)
+    writeCapacityConfig();
+
     if (porSet && saved)
         restoreLearnedParams(*saved);
     else

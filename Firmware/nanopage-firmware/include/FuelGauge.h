@@ -40,6 +40,20 @@ public:
     // ALRT pin (open-drain) stays asserted low until this is done.
     void clearSocChangeAlert();
 
+    // One-shot Serial dump of the EZ-Config/model registers, for comparing against
+    // the datasheet's expected values when SOC doesn't track real battery state.
+    // Caller is responsible for gating this on Config::DEBUG_SERIAL.
+    void debugDumpRegisters();
+
+    // Forces a full, fresh EZ-Config re-init right now (fakes the chip's own POR
+    // flag so runEzConfigIfNeeded() proceeds), then optionally overlays `ref`'s
+    // learned params on top - equivalent to what a real battery-disconnect event
+    // followed by a saved-seed restore would do, but triggered on demand. Needed
+    // because restoreLearnedParams() alone assumes MixSOC was *just* freshly and
+    // validly recomputed by a real POR - calling it on an already-running chip
+    // with a corrupted MixSOC just carries that corruption into the new MixCap.
+    void forceFullReinit(const LearnedParams *ref);
+
     // Board has a generic 2-pin JST connector - must match whatever pack is fitted.
     static constexpr float DESIGN_CAPACITY_MAH = 320.0f;
     static constexpr uint16_t VEMPTY_MV = 3300;
@@ -80,6 +94,10 @@ private:
 
     bool readReg(uint8_t reg, uint16_t &out);
     bool writeReg(uint8_t reg, uint16_t value);
+    // Writes DesignCap/IChgTerm/VEmpty from this board's fixed pack spec (not
+    // learned per-chip state) - called unconditionally from begin() since
+    // restoreLearnedParams() deliberately doesn't touch these three.
+    void writeCapacityConfig();
     void runEzConfigIfNeeded();
     void restoreLearnedParams(const LearnedParams &saved);
     void waitForPorRoutineDone(); // FSTAT.DNR - shared by EZ Config and restore

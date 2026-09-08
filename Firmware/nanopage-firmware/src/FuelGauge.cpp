@@ -36,6 +36,18 @@ void FuelGauge::waitForPorRoutineDone()
     } while (millis() - waitStart < 1000);
 }
 
+void FuelGauge::writeCapacityConfig()
+{
+    uint16_t designCapReg = (uint16_t)(DESIGN_CAPACITY_MAH / CAPACITY_MAH_PER_LSB + 0.5f);
+    float ichgTermMa = DESIGN_CAPACITY_MAH * 0.1f; // 0.1C termination current
+    uint16_t ichgTermReg = (uint16_t)(ichgTermMa / CURRENT_MA_PER_LSB + 0.5f);
+    uint16_t vEmptyReg = ((VEMPTY_MV / 10) << 7) | (VRECOVERY_MV / 40);
+
+    writeReg(REG_DESIGNCAP, designCapReg);
+    writeReg(REG_ICHGTERM, ichgTermReg);
+    writeReg(REG_VEMPTY, vEmptyReg);
+}
+
 // MAX17055 "EZ Config" init (no OCV table), Maxim's documented POR sequence.
 void FuelGauge::runEzConfigIfNeeded()
 {
@@ -53,10 +65,8 @@ void FuelGauge::runEzConfigIfNeeded()
     writeReg(REG_HIBCFG, 0x0);
     writeReg(REG_COMMAND, 0x0); // exit hibernate, step 3
 
+    // DesignCap/IChgTerm/VEmpty already (re)written unconditionally in begin().
     uint16_t designCapReg = (uint16_t)(DESIGN_CAPACITY_MAH / CAPACITY_MAH_PER_LSB + 0.5f);
-    float ichgTermMa = DESIGN_CAPACITY_MAH * 0.1f; // 0.1C termination current
-    uint16_t ichgTermReg = (uint16_t)(ichgTermMa / CURRENT_MA_PER_LSB + 0.5f);
-    uint16_t vEmptyReg = ((VEMPTY_MV / 10) << 7) | (VRECOVERY_MV / 40);
 
     // dQAcc/dPAcc scale FullCapNom to this pack's DesignCap - required by Maxim's
     // EZ Config sequence (UG6365 3.1) alongside DesignCap/IChgTerm/VEmpty, and
@@ -64,10 +74,7 @@ void FuelGauge::runEzConfigIfNeeded()
     uint16_t dqAccReg = designCapReg / 32;
     uint16_t dpAccReg = (uint16_t)(((uint32_t)dqAccReg * 44138UL) / designCapReg); // charge voltage <=4.275V
 
-    writeReg(REG_DESIGNCAP, designCapReg);
     writeReg(REG_DQACC, dqAccReg);
-    writeReg(REG_ICHGTERM, ichgTermReg);
-    writeReg(REG_VEMPTY, vEmptyReg);
     writeReg(REG_DPACC, dpAccReg);
     writeReg(REG_MODELCFG, 0x8000); // Refresh=1, default Li-ion model
 
@@ -128,6 +135,16 @@ bool FuelGauge::begin(const LearnedParams *saved)
 
     uint16_t status = 0;
     bool porSet = readReg(REG_STATUS, status) && (status & 0x0002);
+
+    // DesignCap/IChgTerm/VEmpty reflect this board's fixed pack spec, not learned
+    // per-chip history - keep them correct on every boot regardless of which path
+    // below runs. restoreLearnedParams() deliberately skips them (Maxim's restore
+    // procedure only covers the learned model params), so without this they can be
+    // left stale indefinitely - e.g. from an earlier firmware revision's EZ Config,
+    // or the chip's own POR defaults if a real power-loss ever reset them and the
+    // saved-seed restore path was taken afterward instead of a fresh EZ Config.
+    writeCapacityConfig();
+
     if (porSet && saved)
         restoreLearnedParams(*saved);
     else
@@ -168,6 +185,56 @@ FuelGauge::LearnedParams FuelGauge::learnedParams()
     readReg(REG_FULLCAPREP, p.fullCapRep);
     readReg(REG_CYCLES, p.cycles);
     return p;
+}
+
+void FuelGauge::forceFullReinit(const LearnedParams *ref)
+{
+    uint16_t status = 0;
+    readReg(REG_STATUS, status);
+    writeReg(REG_STATUS, status | 0x0002); // fake a POR so runEzConfigIfNeeded() proceeds
+    runEzConfigIfNeeded();
+    if (ref)
+        restoreLearnedParams(*ref);
+}
+
+void FuelGauge::debugDumpRegisters()
+{
+    struct NamedReg
+    {
+        const char *name;
+        uint8_t reg;
+    };
+    static const NamedReg regs[] = {
+        {"DesignCap", REG_DESIGNCAP},
+        {"IChgTerm", REG_ICHGTERM},
+        {"VEmpty", REG_VEMPTY},
+        {"dQAcc", REG_DQACC},
+        {"dPAcc", REG_DPACC},
+        {"RCOMP0", REG_RCOMP0},
+        {"TempCo", REG_TEMPCO},
+        {"FullCapNom", REG_FULLCAPNOM},
+        {"FullCapRep", REG_FULLCAPREP},
+        {"Cycles", REG_CYCLES},
+        {"MixSOC", REG_MIXSOC},
+        {"MixCap", REG_MIXCAP},
+        {"RepSOC", REG_REPSOC},
+        {"VCell", REG_VCELL},
+        {"Current", REG_CURRENT},
+        {"FSTAT", REG_FSTAT},
+        {"Status", REG_STATUS},
+    };
+    Serial.println("Fuel gauge register dump:");
+    for (const auto &r : regs)
+    {
+        uint16_t value = 0;
+        readReg(r.reg, value);
+        Serial.print("  ");
+        Serial.print(r.name);
+        Serial.print(" (0x");
+        Serial.print(r.reg, HEX);
+        Serial.print(") = 0x");
+        Serial.println(value, HEX);
+    }
 }
 
 float FuelGauge::percent()
