@@ -117,7 +117,7 @@ static bool chargerActive()
 static bool dueForFullRefresh()
 {
     bool due = partialRefreshCount++ % Config::FULL_REFRESH_EVERY == 0;
-    if (due)
+    if (due && Config::DEBUG_SERIAL)
         Serial.println("Periodic full refresh (ghosting clear)");
     return due;
 }
@@ -142,10 +142,13 @@ static void redrawHeader(bool force = false)
     lastPercent = percent;
     lastCharging = charging;
 
-    Serial.print("Fuel gauge: ");
-    Serial.print(percent);
-    Serial.print("%, charging=");
-    Serial.println(charging ? "true" : "false");
+    if (Config::DEBUG_SERIAL)
+    {
+        Serial.print("Fuel gauge: ");
+        Serial.print(percent);
+        Serial.print("%, charging=");
+        Serial.println(charging ? "true" : "false");
+    }
 
     if (dueForFullRefresh())
     {
@@ -156,7 +159,7 @@ static void redrawHeader(bool force = false)
         int16_t x, y, w, h;
         HeaderBar::batteryClusterRect(display, x, y, w, h);
         display.refreshPartial(x, y, w, h, [&]()
-                                { HeaderBar::drawBatteryCluster(display, percent, charging); });
+                               { HeaderBar::drawBatteryCluster(display, percent, charging); });
     }
     xSemaphoreGive(displayMutex);
 }
@@ -196,13 +199,13 @@ static void redrawFooter(bool force = false)
         {
             FooterBar::statsRect(display, x, y, w, h);
             display.refreshPartial(x, y, w, h, [&]()
-                                    { FooterBar::drawStats(display, currentMa, voltageMv); });
+                                   { FooterBar::drawStats(display, currentMa, voltageMv); });
         }
         if (heapChanged)
         {
             FooterBar::heapRect(display, x, y, w, h);
             display.refreshPartial(x, y, w, h, [&]()
-                                    { FooterBar::drawHeap(display, freeHeap); });
+                                   { FooterBar::drawHeap(display, freeHeap); });
         }
     }
     xSemaphoreGive(displayMutex);
@@ -237,13 +240,13 @@ static void moveSelectionAndRedraw(MoveFn moveFn)
 static void onPrevEdge()
 {
     moveSelectionAndRedraw([]()
-                            { fileBrowser.prev(); });
+                           { fileBrowser.prev(); });
 }
 
 static void onNextEdge()
 {
     moveSelectionAndRedraw([]()
-                            { fileBrowser.next(); });
+                           { fileBrowser.next(); });
 }
 
 static void onActionEdge()
@@ -294,8 +297,11 @@ static void drawSleepIcon()
 // Waking from SYSTEMOFF is a full reset - resumes at setup(), not here.
 static void enterDeepSleep()
 {
-    Serial.println("No activity - entering deep sleep");
-    Serial.flush();
+    if (Config::DEBUG_SERIAL)
+    {
+        Serial.println("No activity - entering deep sleep");
+        Serial.flush();
+    }
 
     xSemaphoreTake(displayMutex, portMAX_DELAY);
     display.refreshFull(drawSleepIcon);
@@ -313,20 +319,25 @@ static void enterDeepSleep()
 
     delay(50); // let SPI/GPIO changes settle before cutting power
     NRF_POWER->SYSTEMOFF = POWER_SYSTEMOFF_SYSTEMOFF_Enter;
-    while (true) {} // fallback - SYSTEMOFF should cut power before this ever runs
+    while (true)
+    {
+    } // fallback - SYSTEMOFF should cut power before this ever runs
 }
 
 void setup()
 {
-    Serial.begin(115200);
-    uint32_t waited_ms = 0;
-    while (!Serial && waited_ms < 3000)
+    if (Config::DEBUG_SERIAL)
     {
-        delay(10);
-        waited_ms += 10;
-    }
+        Serial.begin(115200);
+        uint32_t waited_ms = 0;
+        while (!Serial && waited_ms < 3000)
+        {
+            delay(10);
+            waited_ms += 10;
+        }
 
-    Serial.println("NanoPage firmware booting");
+        Serial.println("NanoPage firmware booting");
+    }
 
     displayMutex = xSemaphoreCreateMutex();
 
@@ -343,7 +354,7 @@ void setup()
     else if (FACTORY_SEED_VALID)
         seed = &FACTORY_SEED; // never configured before - a real reference cell beats a blank guess
 
-    if (!fuelGauge.begin(seed))
+    if (!fuelGauge.begin(seed) && Config::DEBUG_SERIAL)
         Serial.println("Fuel gauge: not found at 0x36");
 
     pinMode(PIN_BTN_PREV, INPUT_PULLUP);
@@ -362,7 +373,7 @@ void setup()
     display.begin();
 
     // Only FileBrowser is wired up so far - see PageMode.h.
-    if (!fileBrowser.begin())
+    if (!fileBrowser.begin() && Config::DEBUG_SERIAL)
         Serial.println("SD card: not found");
 
     // Prime all "last drawn" state from real readings before the first paint, so the
