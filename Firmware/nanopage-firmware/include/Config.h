@@ -21,7 +21,7 @@ namespace Config
     // way with DEBUG_SERIAL=false whether or not a host was actively reading
     // the port. The actual print traffic (not USB enumeration, not an active
     // reader) is what correlates with working vs. failing - see Display.h.
-    constexpr bool DEBUG_SERIAL = true;
+    constexpr bool DEBUG_SERIAL = false;
 
     // One-shot: forces the fuel gauge to discard its corrupted learned FullCapRep
     // and restore from FACTORY_SEED instead. Flip back to false and reflash once
