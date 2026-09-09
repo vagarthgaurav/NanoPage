@@ -27,17 +27,20 @@ public:
     // full one should be what causes corruption). Whatever the real mechanism
     // is here, it isn't that - so don't "fix" this again without a fresh test.
     //
-    // Separately: a display-garbling bug (repro: boot, move the cursor down
-    // 11 times - garbles at the 2nd full-after-partial transition) needs
-    // BOTH this gap AND displayCorruptionWorkaroundPadding in Display.cpp -
-    // confirmed on hardware that removing either one while the other is in
-    // place brings the exact same corruption straight back. See
-    // project_display_usb_cdc_refresh_corruption memory before touching
-    // either one. This gap alone: starting a refresh too soon after the
-    // panel's own last hibernate() contributes to the corruption.
-    // MIN_REFRESH_GAP_MS has NOT been hardware-bisected to find the true
-    // minimum, just picked with margin above what incidentally worked.
-    static constexpr uint32_t MIN_REFRESH_GAP_MS = 30;
+    // Separately: a display-garbling bug (repro: run enough consecutive
+    // partial refreshes to trigger a full one) went through several wrong
+    // explanations before landing here - see project_display_usb_cdc_refresh_corruption
+    // memory for the full history, including a RAM-padding reservation and an
+    // earlier untested 30ms gap that both turned out to be red herrings.
+    // 2026-09-09: the real tell was that the cursor visibly slows down for
+    // several presses *before* a corrupting full refresh - not what software
+    // memory corruption looks like. That points at the panel's own charge
+    // pump not fully recovering between refreshes issued too close together,
+    // building up over a run of partial refreshes until the full refresh
+    // (which draws more current) exposes it as a bad waveform. Gating only
+    // the full refresh with a pre-delay (not every partial one) fixed it,
+    // hardware-confirmed at 10ms with no padding array needed.
+    static constexpr uint32_t MIN_REFRESH_GAP_MS = 10;
 
     template <typename DrawFn>
     void refreshFull(DrawFn draw)
@@ -68,7 +71,6 @@ public:
     template <typename DrawFn>
     void refreshPartial(int16_t x, int16_t y, int16_t w, int16_t h, DrawFn draw)
     {
-        waitForMinRefreshGap();
         panel_.setPartialWindow(x, y, w, h);
         panel_.firstPage();
         do
@@ -77,7 +79,6 @@ public:
             draw();
         } while (panel_.nextPage());
         panel_.hibernate();
-        lastRefreshEndMs_ = millis();
     }
 
     // Global partial-refresh counter shared by all callers - forces a full
