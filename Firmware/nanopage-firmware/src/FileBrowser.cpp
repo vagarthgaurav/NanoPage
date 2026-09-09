@@ -112,7 +112,14 @@ bool FileBrowser::activateSelected()
     else
     {
         size_t len = strlen(path_);
-        if (len > 1)
+        size_t sepLen = (len > 1) ? 1 : 0;
+        // Bail out rather than descend if there's no room left even for a
+        // 1-char name - MAX_PATH_LEN - len - 1 below would otherwise underflow
+        // (size_t) once len+sepLen reaches MAX_PATH_LEN-1, corrupting memory
+        // past path_ via strncpy's huge wrapped length.
+        if (len + sepLen >= MAX_PATH_LEN - 1)
+            return false;
+        if (sepLen)
             path_[len++] = '/';
         strncpy(path_ + len, sel.name, MAX_PATH_LEN - len - 1);
         path_[MAX_PATH_LEN - 1] = '\0';
