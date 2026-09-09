@@ -1,5 +1,4 @@
-// Prev/Next/Action button inputs. Currently just tracks activity for the
-// sleep-timeout idle check - no navigation feature consumes button presses yet.
+// Prev/Next/Action button inputs.
 
 #pragma once
 
@@ -7,9 +6,9 @@
 
 namespace Buttons
 {
-    // Sets up PIN_BTN_PREV/NEXT/ACTION as inputs with FALLING-edge interrupts,
-    // and resets the activity clock.
-    void begin();
+    // Sets up PIN_BTN_PREV/NEXT/ACTION as inputs with FALLING-edge interrupts.
+    // Each callback (optional) fires after the activity clock is updated.
+    void begin(void (*onPrev)() = nullptr, void (*onNext)() = nullptr, void (*onAction)() = nullptr);
 
     // Milliseconds since the last button press, or since begin() if none yet.
     uint32_t msSinceActivity();

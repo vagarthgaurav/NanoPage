@@ -8,11 +8,13 @@
 #include "Charger.h"
 #include "Config.h"
 #include "Display.h"
+#include "FileBrowser.h"
 #include "FuelGauge.h"
 #include "Sleep.h"
 
 static FuelGauge fuelGauge;
 static Display display;
+static FileBrowser fileBrowser;
 
 // Shared with the fuel-gauge ALRT handler below, which resets this on a serviced
 // alert so the fallback poll timer counts from the last real update either way.
@@ -38,8 +40,6 @@ void setup()
 
     fuelGauge.beginWithSavedState();
 
-    Buttons::begin();
-
     // MAX17055 ALRT fires on every ~1% RepSOC change (see FuelGauge::enableSocChangeAlert).
     // Reset the fallback poll timer here too, so it counts from the last real update either way.
     fuelGauge.enableAlertInterrupt([]()
@@ -54,9 +54,16 @@ void setup()
 
     display.begin();
 
-    // E-ink holds whatever was last drawn even across a reset/power loss - clear
-    // it once at boot so a stale prior screen doesn't linger indefinitely.
-    display.refreshFull([]() {});
+    // Also clears the panel of whatever was last drawn before reset/power loss.
+    fileBrowser.begin(display);
+
+    Buttons::begin(
+        []()
+        { fileBrowser.prev(display); },
+        []()
+        { fileBrowser.next(display); },
+        []()
+        { fileBrowser.activate(display); });
 }
 
 void loop()
