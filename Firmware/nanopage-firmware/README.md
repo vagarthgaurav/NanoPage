@@ -18,22 +18,37 @@ pio device monitor            # 115200 baud
 The MAX17055 fuel gauge learns a model of the battery cell (internal
 resistance, temperature compensation, full capacity) as it charges and
 discharges - that state lives only in the chip's own registers and is
-lost if the battery is ever unplugged. `FuelGauge::LearnedParams`
-mirrors it to internal flash on a timer and before deep sleep
-(`src/main.cpp`), so a power loss on a board that's already run for a
-while doesn't mean relearning from scratch.
+lost whenever the battery is unplugged (or on a brand-new board that's
+never seen one). `src/main.cpp` mirrors it to internal flash
+(`/fuelgauge_learned.bin`, checksummed, saved hourly and before deep
+sleep) so a real power cycle can reload this exact chip/battery's own
+history instead of starting over.
 
-A brand-new board has no flash save yet either, so `FACTORY_SEED` in
-`src/main.cpp` seeds it with a reference snapshot instead of starting
-from the generic built-in Li-ion model - every board uses the same
-EEMB LP402535 pack, so one calibrated reference board's learned
-parameters are a reasonable starting point for all of them. Normal use
-keeps self-correcting the model from there.
+Whenever `FuelGauge::begin()` sees the chip's own POR flag set (a real
+power cycle, or a fresh/never-configured chip), it seeds the restore
+with, in priority order: this chip's own flash-saved history if present
+and it passes a plausibility check (`FuelGauge::learnedParamsPlausible()`
+- rejects a wildly-out-of-range capacity value, since a corrupted save
+faithfully reloaded forever was the root cause of most of this project's
+fuel-gauge saga); otherwise `FACTORY_SEED`, a reference snapshot from a
+calibrated board with the same EEMB LP402535 pack, for a genuinely new
+board with no history yet. Either way, a full EZ-Config model load
+always runs first on a real POR before the learned params are layered
+on top - see `project_fuelgauge_ez_config_calibration` memory for why
+that ordering matters (it's what actually initializes `MixSOC`).
+
+To manually wipe a chip's learned history and force a fresh start from
+`FACTORY_SEED` (e.g. after swapping in a new battery), set
+`Config::FORCE_FUELGAUGE_RECAL = true` and reflash; it deletes the flash
+snapshot and forces a restore from `FACTORY_SEED`, though a real battery
+disconnect/reconnect afterward is still the most reliable way to get a
+fully clean state (a software-faked POR doesn't reset the chip's
+internal `MixSOC` accumulator on its own). Flip it back to `false` and
+reflash once confirmed.
 
 ```cpp
 // src/main.cpp
 constexpr FuelGauge::LearnedParams FACTORY_SEED = {0x003E, 0x223E, 0x02B2, 0x0277, 0x0031};
-constexpr bool FACTORY_SEED_VALID = true;
 ```
 
 Order: `rcomp0, tempCo, fullCapNom, fullCapRep, cycles`. Captured

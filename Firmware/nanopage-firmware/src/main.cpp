@@ -22,7 +22,8 @@ namespace
 {
     // Fuel-gauge learning lives only in the MAX17055's own registers - if the
     // battery is ever unplugged it forgets everything. Mirroring it to internal
-    // flash lets us reload instead of relearning from a blank EZ Config.
+    // flash lets a real POR reload this exact chip/battery's own history instead
+    // of falling back to FACTORY_SEED every time.
     constexpr const char *LEARNED_PARAMS_PATH = "/fuelgauge_learned.bin";
 
     struct StoredLearnedParams
@@ -40,6 +41,9 @@ namespace
         return sum;
     }
 
+    // False for a genuinely new/never-saved board, a corrupted read, or a snapshot
+    // that fails FuelGauge::learnedParamsPlausible() - e.g. this session's ~4x
+    // phantom-capacity bug, so a bad save can't get faithfully restored forever.
     bool loadLearnedParams(FuelGauge::LearnedParams &out)
     {
         using Adafruit_LittleFS_Namespace::FILE_O_READ;
@@ -51,6 +55,8 @@ namespace
         bool ok = f.read(&stored, sizeof(stored)) == (int)sizeof(stored);
         f.close();
         if (!ok || checksumOf(stored.params) != stored.checksum)
+            return false;
+        if (!FuelGauge::learnedParamsPlausible(stored.params))
             return false;
         out = stored.params;
         return true;
@@ -74,7 +80,6 @@ namespace
     // to recapture them on a new reference board.
     // Order: rcomp0, tempCo, fullCapNom, fullCapRep, cycles.
     constexpr FuelGauge::LearnedParams FACTORY_SEED = {0x003E, 0x223E, 0x02B2, 0x0277, 0x0031};
-    constexpr bool FACTORY_SEED_VALID = true;
 } // namespace
 
 // loop() and the button ISR_DEFERRED task both call into display/fileBrowser - guard against overlap.
@@ -360,25 +365,36 @@ void setup()
     FuelGauge::LearnedParams savedParams;
     bool haveSavedParams = loadLearnedParams(savedParams);
 
-    const FuelGauge::LearnedParams *seed = nullptr;
-    if (haveSavedParams)
-        seed = &savedParams; // this exact chip's own history - always wins
-    else if (FACTORY_SEED_VALID)
-        seed = &FACTORY_SEED; // never configured before - a real reference cell beats a blank guess
+    // begin() only actually restores this seed when the chip's own POR flag is set
+    // - i.e. a genuinely new/never-configured chip, or a real battery disconnect/
+    // reconnect. Otherwise it's a no-op and the chip's live registers (already
+    // tracking this specific cell's history) are left alone. When it does apply:
+    // this exact chip/battery's own flash-saved history wins if we have it (a real
+    // reference beats a guess), otherwise FACTORY_SEED (a genuinely new board).
+    const FuelGauge::LearnedParams *seed = haveSavedParams ? &savedParams : &FACTORY_SEED;
 
     if (!fuelGauge.begin(seed) && Config::DEBUG_SERIAL)
         Serial.println("Fuel gauge: not found at 0x36");
     else if (Config::DEBUG_SERIAL)
     {
         Serial.print("Fuel gauge: seed=");
-        Serial.println(haveSavedParams ? "flash" : (FACTORY_SEED_VALID ? "factory" : "none"));
+        Serial.println(haveSavedParams ? "flash" : "factory");
         fuelGauge.debugDumpRegisters();
     }
 
+    // One-shot, manually-triggered wipe: discard this chip's learned history and
+    // force a fresh restore from FACTORY_SEED, e.g. after swapping in a new
+    // battery. Flip Config::FORCE_FUELGAUGE_RECAL back to false and reflash once
+    // confirmed. Deletes the stale flash snapshot so it isn't reloaded next boot -
+    // note the caveat on forceFullReinit() below still applies here: a
+    // software-faked POR doesn't fully reset the chip's internal MixSOC
+    // accumulator, so a real battery disconnect/reconnect afterward is still the
+    // most reliable way to get a fully clean state (see
+    // project_fuelgauge_ez_config_calibration memory).
     if (Config::FORCE_FUELGAUGE_RECAL && fuelGauge.present())
     {
         fuelGauge.forceFullReinit(&FACTORY_SEED);
-        InternalFS.remove(LEARNED_PARAMS_PATH); // drop the corrupted snapshot, don't reload it later
+        InternalFS.remove(LEARNED_PARAMS_PATH);
         if (Config::DEBUG_SERIAL)
         {
             Serial.println("Fuel gauge: forced restore from factory reference");

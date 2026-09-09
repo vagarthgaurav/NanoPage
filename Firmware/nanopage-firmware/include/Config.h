@@ -21,13 +21,13 @@ namespace Config
     // way with DEBUG_SERIAL=false whether or not a host was actively reading
     // the port. The actual print traffic (not USB enumeration, not an active
     // reader) is what correlates with working vs. failing - see Display.h.
-    constexpr bool DEBUG_SERIAL = false;
+    constexpr bool DEBUG_SERIAL = true;
 
     // One-shot: forces the fuel gauge to discard its corrupted learned FullCapRep
-    // and restore from FACTORY_SEED instead, deleting the stale flash snapshot so
-    // it isn't reloaded later. Flip back to false and reflash once confirmed - a
-    // software-faked POR doesn't reset the chip's internal MixSOC accumulator, so
-    // this alone isn't sufficient; a real battery disconnect/reconnect is still
-    // needed to fully recover (see project_fuelgauge_ez_config_calibration memory).
+    // and restore from FACTORY_SEED instead. Flip back to false and reflash once
+    // confirmed - a software-faked POR doesn't reset the chip's internal MixSOC
+    // accumulator, so this alone isn't sufficient; a real battery disconnect/
+    // reconnect is still needed to fully recover (see
+    // project_fuelgauge_ez_config_calibration memory).
     constexpr bool FORCE_FUELGAUGE_RECAL = false;
 } // namespace Config
