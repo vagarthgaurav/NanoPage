@@ -27,17 +27,20 @@ public:
     //
     // Separately: a display-garbling bug (repro: boot, move the cursor down
     // 11 times - garbles at the 2nd full-after-partial transition, move 11)
-    // previously chased as RAM-layout-sensitive memory corruption (see
-    // project_display_usb_cdc_refresh_corruption memory for that dead end -
-    // padding RAM stopped helping once later commits shifted layout again).
-    // Isolated instead (2026-09-09) to a timing margin: starting a refresh too
-    // soon after the panel's own last hibernate() reproduces it; a few
+    // needs BOTH this gap AND displayCorruptionWorkaroundPadding in
+    // Display.cpp - confirmed on hardware (2026-09-09) that removing the
+    // padding array while this gap is in place brings the exact same
+    // corruption straight back. They are not (yet understood to be)
+    // redundant mitigations for the same thing - see
+    // project_display_usb_cdc_refresh_corruption memory before touching
+    // either one. This gap alone: starting a refresh too soon after the
+    // panel's own last hibernate() contributes to the corruption; a few
     // milliseconds of incidental delay (from unrelated Serial.print calls on
-    // the same call path) was enough to avoid it. waitForMinRefreshGap()
-    // below makes that gap deliberate instead of accidental. If corruption
-    // resurfaces, that's the number to try raising before re-investigating
-    // from scratch - it has NOT been hardware-bisected to find the true
-    // minimum, just picked with margin above what incidentally worked.
+    // the same call path) was enough to avoid it when the padding was also
+    // present, which is what led here. If corruption resurfaces with both
+    // still in place, raise MIN_REFRESH_GAP_MS first - it has NOT been
+    // hardware-bisected to find the true minimum, just picked with margin
+    // above what incidentally worked.
     static constexpr uint32_t MIN_REFRESH_GAP_MS = 30;
 
     template <typename DrawFn>
