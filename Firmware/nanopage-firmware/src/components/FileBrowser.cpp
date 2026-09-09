@@ -13,7 +13,7 @@ namespace
 
     // HEADER_HEIGHT/FOOTER_HEIGHT/ROW_HEIGHT must all be multiples of 8 - see
     // Display::refreshPartial().
-    constexpr int16_t HEADER_HEIGHT = 16; // reserved for the header (battery + current folder), not drawn yet
+    constexpr int16_t HEADER_HEIGHT = Header::HEIGHT;
     constexpr int16_t FOOTER_HEIGHT = 16; // reserved for the footer (debug info), not drawn yet
     constexpr int16_t CONTENT_TOP = HEADER_HEIGHT;
     constexpr int16_t ROW_HEIGHT = 16;
@@ -139,6 +139,8 @@ void FileBrowser::drawAll(Display &display)
 {
     auto &gfx = display.panel();
     auto &fonts = display.fonts();
+
+    header_.draw(display, path_);
 
     if (!mounted_)
     {

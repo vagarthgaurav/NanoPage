@@ -40,17 +40,24 @@ void setup()
 
     fuelGauge.beginWithSavedState();
 
+    // Fires the instant charging starts or stops (USB plugged in, unplugged, or
+    // charge complete), independent of the fuel gauge's own current reading -
+    // PIN_CHG_STAT is what Charger::isCharging() reads. Configures that pin,
+    // so must run before anything else reads isCharging().
+    Charger::begin([]()
+                   {
+        fuelGauge.logStatus(Charger::isCharging(), Charger::isPowerGood());
+        fileBrowser.updateBattery(display, fuelGauge.percent(), Charger::isCharging()); });
+
+    fileBrowser.setBatteryState(fuelGauge.percent(), Charger::isCharging());
+
     // MAX17055 ALRT fires on every ~1% RepSOC change (see FuelGauge::enableSocChangeAlert).
     // Reset the fallback poll timer here too, so it counts from the last real update either way.
     fuelGauge.enableAlertInterrupt([]()
                                    {
         lastFuelGaugePoll = millis();
-        fuelGauge.logStatus(Charger::isCharging(), Charger::isPowerGood()); });
-
-    // Fires the instant charging starts or stops (USB plugged in, unplugged, or
-    // charge complete), independent of the fuel gauge's own current reading.
-    Charger::begin([]()
-                   { fuelGauge.logStatus(Charger::isCharging(), Charger::isPowerGood()); });
+        fuelGauge.logStatus(Charger::isCharging(), Charger::isPowerGood());
+        fileBrowser.updateBattery(display, fuelGauge.percent(), Charger::isCharging()); });
 
     display.begin();
 
@@ -76,6 +83,7 @@ void loop()
     {
         lastFuelGaugePoll = now;
         fuelGauge.logStatus(Charger::isCharging(), Charger::isPowerGood());
+        fileBrowser.updateBattery(display, fuelGauge.percent(), Charger::isCharging());
     }
 
     if (now - lastFuelGaugeSave >= Config::FUEL_GAUGE_SAVE_INTERVAL_MS)

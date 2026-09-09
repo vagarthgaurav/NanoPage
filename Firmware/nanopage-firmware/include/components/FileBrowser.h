@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "SdCardStorage.h"
+#include "components/Header.h"
 
 class Display;
 
@@ -20,6 +21,10 @@ public:
     // Enters the selected folder, or goes up on "..". No-op on a file.
     void activate(Display &display);
 
+    // Forwarded to the header - see Header::setBatteryState/updateBattery.
+    void setBatteryState(float percent, bool charging) { header_.setBatteryState(percent, charging); }
+    void updateBattery(Display &display, float percent, bool charging) { header_.updateBattery(display, percent, charging); }
+
 private:
     static constexpr uint8_t MAX_PATH_LEN = 128;
 
@@ -29,6 +34,7 @@ private:
     uint8_t scrollTop_ = 0;
     char path_[MAX_PATH_LEN] = "/";
     bool mounted_ = false;
+    Header header_;
 
     void reload();
     void moveSelection(Display &display, uint8_t newSelected);
