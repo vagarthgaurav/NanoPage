@@ -8,9 +8,9 @@
 #include "Charger.h"
 #include "Config.h"
 #include "Display.h"
-#include "FileBrowser.h"
 #include "FuelGauge.h"
 #include "Sleep.h"
+#include "components/FileBrowser.h"
 
 static FuelGauge fuelGauge;
 static Display display;

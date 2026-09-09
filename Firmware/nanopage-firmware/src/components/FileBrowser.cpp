@@ -1,4 +1,4 @@
-#include "FileBrowser.h"
+#include "components/FileBrowser.h"
 
 #include <cstring>
 
