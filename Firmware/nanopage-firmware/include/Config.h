@@ -7,6 +7,7 @@
 namespace Config
 {
     constexpr uint32_t FUEL_GAUGE_POLL_INTERVAL_MS = 1800000; // 30 minutes - fallback only, the ALRT interrupt drives normal updates
+    constexpr uint32_t FOOTER_UPDATE_INTERVAL_MS = 60000; // 1 minute - footer's voltage/current are debug data, not event-driven like the header's SoC
     constexpr uint16_t FULL_REFRESH_EVERY = 25; // partial e-paper updates ghost - clear the panel this often
     constexpr uint32_t SLEEP_TIMEOUT_MS = 1800000; // 30 minutes of no button activity
     constexpr uint32_t FUEL_GAUGE_SAVE_INTERVAL_MS = 3600000; // 1 hour - flash wear vs. freshness

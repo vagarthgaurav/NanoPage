@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "SdCardStorage.h"
+#include "components/Footer.h"
 #include "components/Header.h"
 
 class Display;
@@ -25,6 +26,10 @@ public:
     void setBatteryState(float percent, bool charging) { header_.setBatteryState(percent, charging); }
     void updateBattery(Display &display, float percent, bool charging) { header_.updateBattery(display, percent, charging); }
 
+    // Forwarded to the footer - see Footer::setBatteryState/update.
+    void setFooterState(float voltageMv, float currentMa, bool charging) { footer_.setBatteryState(voltageMv, currentMa, charging); }
+    void updateFooter(Display &display, float voltageMv, float currentMa, bool charging) { footer_.update(display, voltageMv, currentMa, charging); }
+
 private:
     static constexpr uint8_t MAX_PATH_LEN = 128;
 
@@ -35,6 +40,7 @@ private:
     char path_[MAX_PATH_LEN] = "/";
     bool mounted_ = false;
     Header header_;
+    Footer footer_;
 
     void reload();
     void moveSelection(Display &display, uint8_t newSelected);

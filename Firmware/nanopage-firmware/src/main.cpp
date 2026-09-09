@@ -50,6 +50,7 @@ void setup()
         fileBrowser.updateBattery(display, fuelGauge.percent(), Charger::isCharging()); });
 
     fileBrowser.setBatteryState(fuelGauge.percent(), Charger::isCharging());
+    fileBrowser.setFooterState(fuelGauge.voltageMilliVolts(), fuelGauge.currentMilliAmps(), Charger::isCharging());
 
     // MAX17055 ALRT fires on every ~1% RepSOC change (see FuelGauge::enableSocChangeAlert).
     // Reset the fallback poll timer here too, so it counts from the last real update either way.
@@ -76,6 +77,7 @@ void setup()
 void loop()
 {
     static uint32_t lastFuelGaugeSave = 0;
+    static uint32_t lastFooterUpdate = 0;
     delay(1000); // lets FreeRTOS tickless idle sleep instead of busy-polling
 
     uint32_t now = millis();
@@ -84,6 +86,12 @@ void loop()
         lastFuelGaugePoll = now;
         fuelGauge.logStatus(Charger::isCharging(), Charger::isPowerGood());
         fileBrowser.updateBattery(display, fuelGauge.percent(), Charger::isCharging());
+    }
+
+    if (now - lastFooterUpdate >= Config::FOOTER_UPDATE_INTERVAL_MS)
+    {
+        lastFooterUpdate = now;
+        fileBrowser.updateFooter(display, fuelGauge.voltageMilliVolts(), fuelGauge.currentMilliAmps(), Charger::isCharging());
     }
 
     if (now - lastFuelGaugeSave >= Config::FUEL_GAUGE_SAVE_INTERVAL_MS)
