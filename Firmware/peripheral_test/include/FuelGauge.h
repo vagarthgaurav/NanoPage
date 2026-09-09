@@ -76,6 +76,12 @@ private:
 
     bool readReg(uint8_t reg, uint16_t &out);
     bool writeReg(uint8_t reg, uint16_t value);
+    // Write, then read back and retry (up to 3 attempts total) until it matches -
+    // required by UG6365 for registers the ModelGauge algorithm updates on its own
+    // (FullCapRep, MixCap, etc.), since a plain write can lose a race against the
+    // chip's own internal write and get silently dropped. Used throughout
+    // restoreLearnedParams() per the datasheet's own restore procedure (4.5-4.11).
+    bool writeAndVerifyReg(uint8_t reg, uint16_t value);
     // Writes DesignCap/IChgTerm/VEmpty from this board's fixed pack spec (not
     // learned per-chip state) - called unconditionally from begin() since
     // restoreLearnedParams() deliberately doesn't touch these three.

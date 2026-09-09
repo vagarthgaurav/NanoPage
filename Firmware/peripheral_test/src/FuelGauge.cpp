@@ -23,6 +23,19 @@ bool FuelGauge::writeReg(uint8_t reg, uint16_t value)
     return wire_.endTransmission() == 0;
 }
 
+bool FuelGauge::writeAndVerifyReg(uint8_t reg, uint16_t value)
+{
+    for (int attempt = 0; attempt < 3; attempt++)
+    {
+        writeReg(reg, value);
+        delay(1);
+        uint16_t readBack = 0;
+        if (readReg(reg, readBack) && readBack == value)
+            return true;
+    }
+    return false;
+}
+
 void FuelGauge::waitForPorRoutineDone()
 {
     uint16_t fstat = 0;
@@ -91,7 +104,7 @@ void FuelGauge::runEzConfigIfNeeded()
     writeReg(REG_HIBCFG, hibCfg);
 
     readReg(REG_STATUS, status);
-    writeReg(REG_STATUS, status & ~0x0002); // clear POR
+    writeAndVerifyReg(REG_STATUS, status & ~0x0002); // clear POR
 }
 
 // Reloads a previously-saved model snapshot instead of starting EZ Config from a
@@ -101,9 +114,9 @@ void FuelGauge::restoreLearnedParams(const LearnedParams &saved)
 {
     waitForPorRoutineDone();
 
-    writeReg(REG_RCOMP0, saved.rcomp0);
-    writeReg(REG_TEMPCO, saved.tempCo);
-    writeReg(REG_FULLCAPNOM, saved.fullCapNom);
+    writeAndVerifyReg(REG_RCOMP0, saved.rcomp0);
+    writeAndVerifyReg(REG_TEMPCO, saved.tempCo);
+    writeAndVerifyReg(REG_FULLCAPNOM, saved.fullCapNom);
     delay(350);
 
     uint16_t mixSoc = 0;
@@ -111,19 +124,23 @@ void FuelGauge::restoreLearnedParams(const LearnedParams &saved)
     readReg(REG_MIXSOC, mixSoc);
     readReg(REG_FULLCAPNOM, fullCapNomNow); // re-read - may have shifted slightly during the wait
     uint16_t mixCap = (uint16_t)(((uint32_t)mixSoc * fullCapNomNow) / 25600);
-    writeReg(REG_MIXCAP, mixCap);
+    // MixCap/FullCapRep are ModelGauge algorithm outputs the chip keeps adjusting on
+    // its own (UG6365) - a plain write can lose a race against the chip's own write
+    // and get silently dropped, so these (and everything else in this restore
+    // sequence) must be write-verified per the datasheet's documented procedure.
+    writeAndVerifyReg(REG_MIXCAP, mixCap);
 
-    writeReg(REG_FULLCAPREP, saved.fullCapRep);
+    writeAndVerifyReg(REG_FULLCAPREP, saved.fullCapRep);
     // dQAcc/dPAcc reload uses the originally-saved FullCapNom, not the re-read one.
-    writeReg(REG_DPACC, 0x0C80);
-    writeReg(REG_DQACC, saved.fullCapNom / 16);
+    writeAndVerifyReg(REG_DPACC, 0x0C80);
+    writeAndVerifyReg(REG_DQACC, saved.fullCapNom / 16);
     delay(350);
 
-    writeReg(REG_CYCLES, saved.cycles);
+    writeAndVerifyReg(REG_CYCLES, saved.cycles);
 
     uint16_t status = 0;
     readReg(REG_STATUS, status);
-    writeReg(REG_STATUS, status & ~0x0002); // clear POR
+    writeAndVerifyReg(REG_STATUS, status & ~0x0002); // clear POR
 }
 
 bool FuelGauge::begin(const LearnedParams *saved)
