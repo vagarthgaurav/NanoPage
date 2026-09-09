@@ -11,8 +11,16 @@ namespace Config
     constexpr uint32_t SLEEP_TIMEOUT_MS = 1800000; // 30 minutes of no button activity
     constexpr uint32_t FUEL_GAUGE_SAVE_INTERVAL_MS = 3600000; // 1 hour - flash wear vs. freshness
 
-    // Gates every Serial.print/println in main.cpp, plus the boot-time wait for a
-    // terminal to connect. Flip to false for field/production builds.
+    // Gates every Serial.print/println in main.cpp, including Serial.begin()
+    // itself and the boot-time wait for a terminal. Flip to false for
+    // field/production builds.
+    //
+    // Confirmed on hardware (2026-09-09): unconditionally calling
+    // Serial.begin() while leaving the app's own prints gated behind this flag
+    // did NOT fix the display corruption in Display.h - it garbled the same
+    // way with DEBUG_SERIAL=false whether or not a host was actively reading
+    // the port. The actual print traffic (not USB enumeration, not an active
+    // reader) is what correlates with working vs. failing - see Display.h.
     constexpr bool DEBUG_SERIAL = false;
 
     // One-shot: forces the fuel gauge to discard its corrupted learned FullCapRep

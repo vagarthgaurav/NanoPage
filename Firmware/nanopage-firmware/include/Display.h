@@ -25,14 +25,16 @@ public:
     // full one should be what causes corruption). Whatever the real mechanism
     // is here, it isn't that - so don't "fix" this again without a fresh test.
     //
-    // Garbling still shows up every ~8-9 refreshes even with hibernate() kept,
-    // and only when DEBUG_SERIAL is off. A settleDelay() after hibernate() (extra
-    // idle time before the next refresh) did NOT fix it, even with the user
-    // manually waiting well over that delay between presses - so it isn't a
-    // timing/settling issue. It's count-based, not time-based, and it lines up
-    // with Config::FULL_REFRESH_EVERY - worth checking whether something about
-    // switching between full-window and partial-window mode on the *same*
-    // shared _buffer (see GxEPD2_BW) is the actual cause.
+    // Separately: a display-garbling bug (repro: boot, move the cursor down
+    // 11 times - garbles at the 2nd full-after-partial transition, move 11)
+    // is CONFIRMED (2026-09-09) to be a RAM-layout-sensitive memory
+    // corruption - see displayCorruptionWorkaroundPadding in Display.cpp for
+    // the mitigation and the full chain of ruled-out theories (DEBUG_SERIAL/
+    // USB-CDC state, SD-card power sequencing, a stack overflow - measured
+    // directly, plenty of headroom - and "any linked flash code"). Root cause
+    // is still unknown; only adding RAM footprint prevents it. Do not remove
+    // that padding array without a real fix in hand and a fresh 11-move-repro
+    // test to confirm it.
     template <typename DrawFn>
     void refreshFull(DrawFn draw)
     {
