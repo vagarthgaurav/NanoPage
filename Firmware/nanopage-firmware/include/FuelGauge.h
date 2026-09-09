@@ -62,7 +62,7 @@ public:
 private:
     static constexpr uint8_t ADDR = 0x36;
     static constexpr uint8_t REG_STATUS = 0x00;    // bit1 = POR, bit7 = dSOCi (1% SOC change alert)
-    static constexpr uint8_t REG_CONFIG = 0x01;    // bit2 = Aen (enable ALRT pin output)
+    static constexpr uint8_t REG_CONFIG = 0x1D;    // bit2 = Aen (enable ALRT pin output)
     static constexpr uint8_t REG_REPSOC = 0x06;    // 1/256 %/LSB
     static constexpr uint8_t REG_VCELL = 0x09;     // 78.125uV/LSB
     static constexpr uint8_t REG_CURRENT = 0x0A;   // signed, 1.5625uV/RSENSE per LSB
