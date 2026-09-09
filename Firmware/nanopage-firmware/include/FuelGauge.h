@@ -10,10 +10,8 @@ class FuelGauge
 public:
     explicit FuelGauge(TwoWire &wire = Wire) : wire_(wire) {}
 
-    // What the chip has learned about this specific cell so far - lives only in its
-    // registers and is forgotten if it ever loses power (e.g. battery unplugged).
-    // Plain aggregate (no default member initializers) so it stays constexpr-brace-
-    // initializable in the C++ dialect this toolchain builds with.
+    // What the chip has learned about this cell - lives only in its registers,
+    // lost on power loss. Plain aggregate so it stays constexpr-brace-initializable.
     struct LearnedParams
     {
         uint16_t rcomp0;
@@ -29,6 +27,13 @@ public:
     // that fresh model instead of starting from its generic hardware defaults.
     bool begin(const LearnedParams *saved = nullptr);
 
+    // Restores any learned params previously saved to internal flash (falling back
+    // to FACTORY_SEED if none exist yet or the saved snapshot doesn't check out),
+    // then begin()s the chip with that seed. Also services
+    // Config::FORCE_FUELGAUGE_RECAL's one-shot wipe-and-reseed path. Call once from
+    // setup() instead of begin() directly when flash persistence is wanted.
+    bool beginWithSavedState();
+
     bool present() const { return present_; }
 
     float percent(); // state of charge, 0..100
@@ -38,14 +43,28 @@ public:
     // Snapshot the model's current learned state, for persisting outside the chip.
     LearnedParams learnedParams();
 
+    // Mirrors learnedParams() to internal flash (checksummed), so beginWithSavedState()
+    // can restore it after a real POR. No-op if the chip isn't present.
+    void saveLearnedParamsToFlash();
+
     // Clears the 1% SOC change alert flag (STATUS.dSOCi) after servicing it - the
     // ALRT pin (open-drain) stays asserted low until this is done.
     void clearSocChangeAlert();
+
+    // Sets up PIN_FUEL_ALERT (ALRT, open-drain/active-low) as a FALLING interrupt:
+    // clears the SOC-change alert when it fires, then invokes `onAlert` (if given)
+    // so the caller can react - e.g. log status or reset a fallback poll timer.
+    void enableAlertInterrupt(void (*onAlert)() = nullptr);
 
     // One-shot Serial dump of the EZ-Config/model registers, for comparing against
     // the datasheet's expected values when SOC doesn't track real battery state.
     // Caller is responsible for gating this on Config::DEBUG_SERIAL.
     void debugDumpRegisters();
+
+    // Serial-logs percent/current/voltage plus the given charger state (read by
+    // the caller - BQ25170 pins, not this chip). Gated internally on
+    // Config::DEBUG_SERIAL.
+    void logStatus(bool charging, bool powerGood);
 
     // Forces a full, fresh EZ-Config re-init right now (fakes the chip's own POR
     // flag so runEzConfigIfNeeded() proceeds), then optionally overlays `ref`'s

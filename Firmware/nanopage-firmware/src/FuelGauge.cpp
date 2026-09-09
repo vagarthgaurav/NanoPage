@@ -1,6 +1,81 @@
 #include "FuelGauge.h"
 #include "Config.h"
 
+#include <InternalFileSystem.h>
+
+namespace
+{
+    // The fuel gauge's learned model lives only in its own registers and is lost
+    // if the battery is unplugged - mirrored to flash so a POR can reload it.
+    constexpr const char *LEARNED_PARAMS_PATH = "/fuelgauge_learned.bin";
+
+    struct StoredLearnedParams
+    {
+        FuelGauge::LearnedParams params;
+        uint16_t checksum;
+    };
+
+    uint16_t checksumOf(const FuelGauge::LearnedParams &p)
+    {
+        uint16_t sum = 0;
+        const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&p);
+        for (size_t i = 0; i < sizeof(p); i++)
+            sum += bytes[i];
+        return sum;
+    }
+
+    // False for a genuinely new/never-saved board, a corrupted read, or a snapshot
+    // that fails FuelGauge::learnedParamsPlausible() - e.g. this session's ~4x
+    // phantom-capacity bug, so a bad save can't get faithfully restored forever.
+    bool loadLearnedParamsFile(FuelGauge::LearnedParams &out)
+    {
+        using Adafruit_LittleFS_Namespace::FILE_O_READ;
+        Adafruit_LittleFS_Namespace::File f = InternalFS.open(LEARNED_PARAMS_PATH, FILE_O_READ);
+        if (!f)
+            return false;
+
+        StoredLearnedParams stored;
+        bool ok = f.read(&stored, sizeof(stored)) == (int)sizeof(stored);
+        f.close();
+        if (!ok || checksumOf(stored.params) != stored.checksum)
+            return false;
+        if (!FuelGauge::learnedParamsPlausible(stored.params))
+            return false;
+        out = stored.params;
+        return true;
+    }
+
+    void saveLearnedParamsFile(const FuelGauge::LearnedParams &p)
+    {
+        using Adafruit_LittleFS_Namespace::FILE_O_WRITE;
+        StoredLearnedParams stored{p, checksumOf(p)};
+        Adafruit_LittleFS_Namespace::File f = InternalFS.open(LEARNED_PARAMS_PATH, FILE_O_WRITE);
+        if (!f)
+            return;
+        f.write(reinterpret_cast<const uint8_t *>(&stored), sizeof(stored));
+        f.close();
+    }
+
+    // Reference snapshot from a calibrated reference board (same EEMB LP402535
+    // pack) - see README.md "Fuel gauge factory seed" for provenance.
+    // Order: rcomp0, tempCo, fullCapNom, fullCapRep, cycles.
+    constexpr FuelGauge::LearnedParams FACTORY_SEED = {0x003E, 0x223E, 0x02B2, 0x0277, 0x0031};
+
+    // attachInterrupt() needs a plain function pointer, so the single fuel-gauge
+    // instance and its caller-supplied callback are stashed here for the trampoline
+    // below rather than passed as a capturing lambda.
+    FuelGauge *g_alertInstance = nullptr;
+    void (*g_onAlert)() = nullptr;
+
+    void onFuelAlertEdge()
+    {
+        if (g_alertInstance)
+            g_alertInstance->clearSocChangeAlert();
+        if (g_onAlert)
+            g_onAlert();
+    }
+} // namespace
+
 bool FuelGauge::readReg(uint8_t reg, uint16_t &out)
 {
     wire_.beginTransmission(ADDR);
@@ -193,6 +268,59 @@ bool FuelGauge::begin(const LearnedParams *saved)
     return true;
 }
 
+bool FuelGauge::beginWithSavedState()
+{
+    InternalFS.begin();
+    LearnedParams savedParams;
+    bool haveSavedParams = loadLearnedParamsFile(savedParams);
+
+    // begin() only actually restores this seed when the chip's own POR flag is set
+    // - i.e. a genuinely new/never-configured chip, or a real battery disconnect/
+    // reconnect. Otherwise it's a no-op and the chip's live registers (already
+    // tracking this specific cell's history) are left alone. When it does apply:
+    // this exact chip/battery's own flash-saved history wins if we have it (a real
+    // reference beats a guess), otherwise FACTORY_SEED (a genuinely new board).
+    const LearnedParams *seed = haveSavedParams ? &savedParams : &FACTORY_SEED;
+
+    if (!begin(seed) && Config::DEBUG_SERIAL)
+        Serial.println("Fuel gauge: not found at 0x36");
+    else if (Config::DEBUG_SERIAL)
+    {
+        Serial.print("Fuel gauge: seed=");
+        Serial.println(haveSavedParams ? "flash" : "factory");
+        debugDumpRegisters();
+    }
+
+    // One-shot, manually-triggered wipe: discard this chip's learned history and
+    // force a fresh restore from FACTORY_SEED, e.g. after swapping in a new
+    // battery. Flip Config::FORCE_FUELGAUGE_RECAL back to false and reflash once
+    // confirmed. Deletes the stale flash snapshot so it isn't reloaded next boot -
+    // note the caveat on forceFullReinit() above still applies here: a
+    // software-faked POR doesn't fully reset the chip's internal MixSOC
+    // accumulator, so a real battery disconnect/reconnect afterward is still the
+    // most reliable way to get a fully clean state (see
+    // project_fuelgauge_ez_config_calibration memory).
+    if (Config::FORCE_FUELGAUGE_RECAL && present_)
+    {
+        forceFullReinit(&FACTORY_SEED);
+        InternalFS.remove(LEARNED_PARAMS_PATH);
+        if (Config::DEBUG_SERIAL)
+        {
+            Serial.println("Fuel gauge: forced restore from factory reference");
+            debugDumpRegisters();
+        }
+    }
+
+    return present_;
+}
+
+void FuelGauge::saveLearnedParamsToFlash()
+{
+    if (!present_)
+        return;
+    saveLearnedParamsFile(learnedParams());
+}
+
 // Lets ALRT pulse low on every ~1% RepSOC step, so the caller can redraw on that
 // edge instead of only on its own poll timer. Read-modify-write so it doesn't
 // disturb other CONFIG/CONFIG2 bits (defaults, or ones a future feature sets).
@@ -212,6 +340,15 @@ void FuelGauge::clearSocChangeAlert()
     uint16_t status = 0;
     readReg(REG_STATUS, status);
     writeReg(REG_STATUS, status & ~STATUS_DSOCI);
+}
+
+void FuelGauge::enableAlertInterrupt(void (*onAlert)())
+{
+    g_alertInstance = this;
+    g_onAlert = onAlert;
+
+    pinMode(PIN_FUEL_ALERT, INPUT_PULLUP); // open-drain, active low
+    attachInterrupt(PIN_FUEL_ALERT, onFuelAlertEdge, FALLING | ISR_DEFERRED);
 }
 
 FuelGauge::LearnedParams FuelGauge::learnedParams()
@@ -243,6 +380,24 @@ bool FuelGauge::learnedParamsPlausible(const LearnedParams &p)
         return mah > DESIGN_CAPACITY_MAH * 0.5f && mah < DESIGN_CAPACITY_MAH * 2.0f;
     };
     return capacityInRangeMah(p.fullCapRep) && capacityInRangeMah(p.fullCapNom);
+}
+
+void FuelGauge::logStatus(bool charging, bool powerGood)
+{
+    if (!Config::DEBUG_SERIAL)
+        return;
+
+    Serial.print("Fuel gauge: ");
+    Serial.print((uint8_t)(percent() + 0.5f));
+    Serial.print("%, charging=");
+    Serial.print(charging ? "true" : "false");
+    Serial.print(", powerGood=");
+    Serial.print(powerGood ? "true" : "false");
+    Serial.print(", current=");
+    Serial.print(currentMilliAmps());
+    Serial.print("mA, voltage=");
+    Serial.print(voltageMilliVolts());
+    Serial.println("mV");
 }
 
 void FuelGauge::debugDumpRegisters()
