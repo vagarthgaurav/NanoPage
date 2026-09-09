@@ -9,6 +9,7 @@
 #include <SPI.h>
 #include <SdFat.h>
 #include <Wire.h>
+#include <bluefruit.h>
 #include <math.h>
 
 #include "Display.h"
@@ -18,7 +19,14 @@ namespace
 {
     constexpr uint32_t LOG_INTERVAL_MS = 30000;
     constexpr size_t WRITE_CHUNK_BYTES = 512;
-    constexpr uint32_t WRITE_CHUNK_COUNT = 2048; // ~1MB per iteration
+    constexpr uint32_t WRITE_CHUNK_COUNT = 4096; // ~2MB per iteration - more time in the high-current write/read phase relative to open/close overhead
+
+    // Extra always-on-radio load stacked on top of the SD/e-paper hammering.
+    // Max TX power on nRF52840 (8 is the ceiling in Bluefruit's own accepted
+    // list) and the fastest legal legacy advertising interval (32 units of
+    // 0.625ms = 20ms) to keep the radio keyed up as often as possible.
+    constexpr int8_t BLE_TX_POWER_DBM = 8;
+    constexpr uint16_t BLE_ADV_INTERVAL_UNITS = 32;
 
     // Neither the BQ25170 nor this bare EEMB cell has any over-discharge cutoff -
     // this is the only thing standing between the load and a damaged battery.
@@ -31,7 +39,22 @@ namespace
     bool depleted = false;      // sticky - SAFE STOP fired, never resume hammering
     bool cycleComplete = false; // sticky - charge taper detected, separate from `depleted`
     bool wasCharging = false;
+    bool bleAdvertising = false;
     uint8_t scratch[WRITE_CHUNK_BYTES];
+
+    // Mirrors the SD/e-paper load gating: keep the radio quiet whenever we're
+    // not supposed to be drawing extra current (charging, depleted, or done),
+    // and only touch the advertiser state on an actual transition.
+    void setBleLoad(bool on)
+    {
+        if (on == bleAdvertising)
+            return;
+        if (on)
+            Bluefruit.Advertising.start(0);
+        else
+            Bluefruit.Advertising.stop();
+        bleAdvertising = on;
+    }
 
     void drawStatus(uint32_t elapsedS, float percent, float mv, float ma, float peakMa, uint32_t tookMs)
     {
@@ -172,6 +195,16 @@ void setup()
     Serial.println("=== NanoPage battery burn test ===");
     Serial.println("Continuously hammers SD + e-paper, never sleeps. Do not use for anything else.");
 
+    Bluefruit.begin();
+    Bluefruit.setTxPower(BLE_TX_POWER_DBM);
+    Bluefruit.setName("NanoPage-Burn");
+    Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
+    Bluefruit.Advertising.addTxPower();
+    Bluefruit.Advertising.addName();
+    Bluefruit.Advertising.restartOnDisconnect(true);
+    Bluefruit.Advertising.setInterval(BLE_ADV_INTERVAL_UNITS, BLE_ADV_INTERVAL_UNITS);
+    Bluefruit.Advertising.setFastTimeout(0); // stay at the fast interval forever, never fall back to slow
+
     Wire.begin();
     Wire.setClock(100000);
     if (!fuelGauge.begin())
@@ -181,7 +214,10 @@ void setup()
 
     digitalWrite(PIN_SD_ON, HIGH);
     delay(10);
-    sdMounted = sd.begin(SdSpiConfig(PIN_SD_CS, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+    // 16MHz (up from the 4MHz used elsewhere) - within the SD default-speed
+    // spec (25MHz) with margin for the shared bus with the e-paper panel,
+    // and keeps the flash controller busier for more sustained draw.
+    sdMounted = sd.begin(SdSpiConfig(PIN_SD_CS, SHARED_SPI, SD_SCK_MHZ(16), &SPI));
     if (!sdMounted)
         Serial.println("SD card: not found - discharge current will be lower without it");
 
@@ -237,7 +273,11 @@ void loop()
 
     // Never add load while the charger is trying to reach a clean, tapering
     // full charge - that's the signal the fuel gauge needs to re-anchor to 100%.
-    if (depleted || cycleComplete || charging)
+    // Same reasoning covers the BLE radio load below.
+    bool shouldLoad = !(depleted || cycleComplete || charging);
+    setBleLoad(shouldLoad);
+
+    if (!shouldLoad)
     {
         uint32_t now = millis();
         if (now - lastLogMs >= LOG_INTERVAL_MS)
