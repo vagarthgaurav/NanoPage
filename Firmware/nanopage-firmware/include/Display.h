@@ -27,17 +27,23 @@ public:
     //
     // Separately: a display-garbling bug (repro: boot, move the cursor down
     // 11 times - garbles at the 2nd full-after-partial transition, move 11)
-    // is CONFIRMED (2026-09-09) to be a RAM-layout-sensitive memory
-    // corruption - see displayCorruptionWorkaroundPadding in Display.cpp for
-    // the mitigation and the full chain of ruled-out theories (DEBUG_SERIAL/
-    // USB-CDC state, SD-card power sequencing, a stack overflow - measured
-    // directly, plenty of headroom - and "any linked flash code"). Root cause
-    // is still unknown; only adding RAM footprint prevents it. Do not remove
-    // that padding array without a real fix in hand and a fresh 11-move-repro
-    // test to confirm it.
+    // previously chased as RAM-layout-sensitive memory corruption (see
+    // project_display_usb_cdc_refresh_corruption memory for that dead end -
+    // padding RAM stopped helping once later commits shifted layout again).
+    // Isolated instead (2026-09-09) to a timing margin: starting a refresh too
+    // soon after the panel's own last hibernate() reproduces it; a few
+    // milliseconds of incidental delay (from unrelated Serial.print calls on
+    // the same call path) was enough to avoid it. waitForMinRefreshGap()
+    // below makes that gap deliberate instead of accidental. If corruption
+    // resurfaces, that's the number to try raising before re-investigating
+    // from scratch - it has NOT been hardware-bisected to find the true
+    // minimum, just picked with margin above what incidentally worked.
+    static constexpr uint32_t MIN_REFRESH_GAP_MS = 30;
+
     template <typename DrawFn>
     void refreshFull(DrawFn draw)
     {
+        waitForMinRefreshGap();
         panel_.setFullWindow();
         panel_.firstPage();
         do
@@ -46,6 +52,7 @@ public:
             draw();
         } while (panel_.nextPage());
         panel_.hibernate();
+        lastRefreshEndMs_ = millis();
     }
 
     // Fast partial update (~400ms vs ~1.75s for a full refresh on this
@@ -53,6 +60,7 @@ public:
     template <typename DrawFn>
     void refreshPartial(int16_t x, int16_t y, int16_t w, int16_t h, DrawFn draw)
     {
+        waitForMinRefreshGap();
         panel_.setPartialWindow(x, y, w, h);
         panel_.firstPage();
         do
@@ -61,6 +69,7 @@ public:
             draw();
         } while (panel_.nextPage());
         panel_.hibernate();
+        lastRefreshEndMs_ = millis();
     }
 
     Panel &panel() { return panel_; }
@@ -69,4 +78,14 @@ public:
 private:
     Panel panel_;
     U8G2_FOR_ADAFRUIT_GFX fonts_;
+    uint32_t lastRefreshEndMs_ = 0;
+
+    // Blocks until at least MIN_REFRESH_GAP_MS has passed since the panel's
+    // last hibernate() - see the note on MIN_REFRESH_GAP_MS above.
+    void waitForMinRefreshGap()
+    {
+        uint32_t elapsed = millis() - lastRefreshEndMs_; // wraps correctly even across a millis() rollover
+        if (elapsed < MIN_REFRESH_GAP_MS)
+            delay(MIN_REFRESH_GAP_MS - elapsed);
+    }
 };
