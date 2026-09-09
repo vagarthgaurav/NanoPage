@@ -73,7 +73,7 @@ namespace
     // README.md "Fuel gauge factory seed" for where these values came from and how
     // to recapture them on a new reference board.
     // Order: rcomp0, tempCo, fullCapNom, fullCapRep, cycles.
-    constexpr FuelGauge::LearnedParams FACTORY_SEED = {0x0013, 0x223E, 0x02E6, 0x0280, 0x0013};
+    constexpr FuelGauge::LearnedParams FACTORY_SEED = {0x003E, 0x223E, 0x02B2, 0x0277, 0x0031};
     constexpr bool FACTORY_SEED_VALID = true;
 } // namespace
 
