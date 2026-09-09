@@ -123,7 +123,7 @@ static bool inputPowerGood()
 // refresh counts, whichever region it's for.
 static bool dueForFullRefresh()
 {
-    bool due = partialRefreshCount++ % Config::FULL_REFRESH_EVERY == 0;
+    bool due = ++partialRefreshCount % Config::FULL_REFRESH_EVERY == 0;
     if (due && Config::DEBUG_SERIAL)
         Serial.println("Periodic full refresh (ghosting clear)");
     return due;
