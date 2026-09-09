@@ -94,6 +94,10 @@ private:
 
     bool readReg(uint8_t reg, uint16_t &out);
     bool writeReg(uint8_t reg, uint16_t value);
+    // Converts one raw register value into an engineering-units string for
+    // debugDumpRegisters() - RCOMP0/TempCo have no clean physical unit, so
+    // those print as plain calibration coefficients.
+    String decodeRegister(uint8_t reg, uint16_t raw);
     // Writes DesignCap/IChgTerm/VEmpty from this board's fixed pack spec (not
     // learned per-chip state) - called unconditionally from begin() since
     // restoreLearnedParams() deliberately doesn't touch these three.

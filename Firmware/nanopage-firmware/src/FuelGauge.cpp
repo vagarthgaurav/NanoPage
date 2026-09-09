@@ -233,7 +233,57 @@ void FuelGauge::debugDumpRegisters()
         Serial.print(" (0x");
         Serial.print(r.reg, HEX);
         Serial.print(") = 0x");
-        Serial.println(value, HEX);
+        Serial.print(value, HEX);
+        Serial.print("  -> ");
+        Serial.println(decodeRegister(r.reg, value));
+    }
+}
+
+String FuelGauge::decodeRegister(uint8_t reg, uint16_t raw)
+{
+    char buf[48];
+    switch (reg)
+    {
+    case REG_DESIGNCAP:
+    case REG_FULLCAPNOM:
+    case REG_FULLCAPREP:
+    case REG_MIXCAP:
+    case REG_DQACC:
+        snprintf(buf, sizeof(buf), "%.1f mAh", raw * CAPACITY_MAH_PER_LSB);
+        return String(buf);
+    case REG_ICHGTERM:
+        snprintf(buf, sizeof(buf), "%.1f mA", raw * CURRENT_MA_PER_LSB);
+        return String(buf);
+    case REG_CURRENT:
+        snprintf(buf, sizeof(buf), "%.1f mA", (int16_t)raw * CURRENT_MA_PER_LSB);
+        return String(buf);
+    case REG_VEMPTY:
+        snprintf(buf, sizeof(buf), "VEmpty=%umV VRecovery=%umV", ((raw >> 7) & 0x1FF) * 10, (raw & 0x7F) * 40);
+        return String(buf);
+    case REG_VCELL:
+        snprintf(buf, sizeof(buf), "%.3f V", raw * 78.125f / 1000000.0f);
+        return String(buf);
+    case REG_DPACC:
+        snprintf(buf, sizeof(buf), "%.2f %%", raw * 0.0625f);
+        return String(buf);
+    case REG_MIXSOC:
+    case REG_REPSOC:
+        snprintf(buf, sizeof(buf), "%.2f %%", raw / 256.0f);
+        return String(buf);
+    case REG_CYCLES:
+        snprintf(buf, sizeof(buf), "%.2f cycles", raw / 100.0f);
+        return String(buf);
+    case REG_FSTAT:
+        return raw & 0x0001 ? "DNR=1 (not ready)" : "DNR=0 (ready)";
+    case REG_STATUS:
+        snprintf(buf, sizeof(buf), "POR=%d dSOCi=%d", (raw >> 1) & 1, (raw >> 7) & 1);
+        return String(buf);
+    case REG_RCOMP0:
+    case REG_TEMPCO:
+        snprintf(buf, sizeof(buf), "%u (calibration coefficient, no direct unit)", raw);
+        return String(buf);
+    default:
+        return String(raw);
     }
 }
 
