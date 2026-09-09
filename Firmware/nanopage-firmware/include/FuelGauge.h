@@ -23,8 +23,10 @@ public:
         uint16_t cycles;
     };
 
-    // If the chip's POR flag is set (lost power) and `saved` is non-null, reloads
-    // those learned parameters instead of starting EZ Config from a blank slate.
+    // A real POR (lost power) always gets a full EZ-Config model load - that's what
+    // makes the chip (re)compute a valid MixSOC from the current cell voltage. If
+    // `saved` is non-null, those learned parameters are then layered on top of
+    // that fresh model instead of starting from its generic hardware defaults.
     bool begin(const LearnedParams *saved = nullptr);
 
     bool present() const { return present_; }
@@ -53,6 +55,14 @@ public:
     // validly recomputed by a real POR - calling it on an already-running chip
     // with a corrupted MixSOC just carries that corruption into the new MixCap.
     void forceFullReinit(const LearnedParams *ref);
+
+    // Sanity check for a LearnedParams snapshot (e.g. one loaded back from flash)
+    // - rejects capacity values wildly outside what's plausible for this board's
+    // pack, so a corrupted snapshot can't get faithfully restored forever. This
+    // exact failure mode (a ~4x phantom capacity persisting indefinitely once
+    // saved) is what caused most of this saga - see
+    // project_fuelgauge_ez_config_calibration memory.
+    static bool learnedParamsPlausible(const LearnedParams &p);
 
     // Board has a generic 2-pin JST connector - must match whatever pack is fitted.
     static constexpr float DESIGN_CAPACITY_MAH = 320.0f;
@@ -94,6 +104,12 @@ private:
 
     bool readReg(uint8_t reg, uint16_t &out);
     bool writeReg(uint8_t reg, uint16_t value);
+    // Write, then read back and retry (up to 3 attempts total) until it matches -
+    // required by UG6365 for registers the ModelGauge algorithm updates on its own
+    // (FullCapRep, MixCap, etc.), since a plain write can lose a race against the
+    // chip's own internal write and get silently dropped. Used throughout
+    // restoreLearnedParams() per the datasheet's own restore procedure (4.5-4.11).
+    bool writeAndVerifyReg(uint8_t reg, uint16_t value);
     // Converts one raw register value into an engineering-units string for
     // debugDumpRegisters() - RCOMP0/TempCo have no clean physical unit, so
     // those print as plain calibration coefficients.
