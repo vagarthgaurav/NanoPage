@@ -165,6 +165,46 @@ FuelGauge::LearnedParams FuelGauge::learnedParams()
     return p;
 }
 
+void FuelGauge::debugDumpRegisters()
+{
+    struct NamedReg
+    {
+        const char *name;
+        uint8_t reg;
+    };
+    static const NamedReg regs[] = {
+        {"DesignCap", REG_DESIGNCAP},
+        {"IChgTerm", REG_ICHGTERM},
+        {"VEmpty", REG_VEMPTY},
+        {"dQAcc", REG_DQACC},
+        {"dPAcc", REG_DPACC},
+        {"RCOMP0", REG_RCOMP0},
+        {"TempCo", REG_TEMPCO},
+        {"FullCapNom", REG_FULLCAPNOM},
+        {"FullCapRep", REG_FULLCAPREP},
+        {"Cycles", REG_CYCLES},
+        {"MixSOC", REG_MIXSOC},
+        {"MixCap", REG_MIXCAP},
+        {"RepSOC", REG_REPSOC},
+        {"VCell", REG_VCELL},
+        {"Current", REG_CURRENT},
+        {"FSTAT", REG_FSTAT},
+        {"Status", REG_STATUS},
+    };
+    Serial.println("Fuel gauge register dump:");
+    for (const auto &r : regs)
+    {
+        uint16_t value = 0;
+        readReg(r.reg, value);
+        Serial.print("  ");
+        Serial.print(r.name);
+        Serial.print(" (0x");
+        Serial.print(r.reg, HEX);
+        Serial.print(") = 0x");
+        Serial.println(value, HEX);
+    }
+}
+
 float FuelGauge::percent()
 {
     uint16_t raw = 0;

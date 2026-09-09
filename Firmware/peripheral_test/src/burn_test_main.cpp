@@ -214,6 +214,7 @@ void loop()
         cycleComplete = true;
         Serial.println("CYCLE COMPLETE: charge tapered off after a full discharge/charge cycle.");
         Serial.println("Reflash normal firmware with `pio run -e nanopage -t upload` and check the SOC reading.");
+        fuelGauge.debugDumpRegisters();
         display.refreshFull([&]()
                              { drawChargeComplete(elapsedS, percent, mv); });
     }
@@ -229,6 +230,7 @@ void loop()
         Serial.print("SAFE STOP: cell reached ");
         Serial.print(mv);
         Serial.println("mV - halting load to protect the battery. Recharge it now.");
+        fuelGauge.debugDumpRegisters();
         display.refreshFull([&]()
                              { drawDepleted(elapsedS, percent, mv); });
     }

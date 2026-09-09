@@ -37,6 +37,10 @@ public:
     // Snapshot the model's current learned state, for persisting outside the chip.
     LearnedParams learnedParams();
 
+    // One-shot Serial dump of the EZ-Config/model registers, for comparing against
+    // the datasheet's expected values or across burn-test cycles.
+    void debugDumpRegisters();
+
     // Board has a generic 2-pin JST connector - must match whatever pack is fitted.
     static constexpr float DESIGN_CAPACITY_MAH = 320.0f;
     static constexpr uint16_t VEMPTY_MV = 3300;
