@@ -405,6 +405,8 @@ void FuelGauge::logStatus(bool charging, bool powerGood)
     Serial.print(powerGood ? "true" : "false");
     Serial.print(", current=");
     Serial.print(currentMilliAmps());
+    Serial.print("mA, avgCurrent=");
+    Serial.print(avgCurrentMilliAmps());
     Serial.print("mA, voltage=");
     Serial.print(voltageMilliVolts());
     Serial.println("mV");
@@ -433,6 +435,7 @@ void FuelGauge::debugDumpRegisters()
         {"RepSOC", REG_REPSOC},
         {"VCell", REG_VCELL},
         {"Current", REG_CURRENT},
+        {"AvgCurrent", REG_AVGCURRENT},
         {"FSTAT", REG_FSTAT},
         {"Status", REG_STATUS},
     };
@@ -468,6 +471,7 @@ String FuelGauge::decodeRegister(uint8_t reg, uint16_t raw)
         snprintf(buf, sizeof(buf), "%.1f mA", raw * CURRENT_MA_PER_LSB);
         return String(buf);
     case REG_CURRENT:
+    case REG_AVGCURRENT:
         snprintf(buf, sizeof(buf), "%.1f mA", (int16_t)raw * CURRENT_MA_PER_LSB);
         return String(buf);
     case REG_VEMPTY:
@@ -520,6 +524,14 @@ float FuelGauge::currentMilliAmps()
 {
     uint16_t raw = 0;
     if (!readReg(REG_CURRENT, raw))
+        return 0.0f;
+    return (int16_t)raw * CURRENT_MA_PER_LSB;
+}
+
+float FuelGauge::avgCurrentMilliAmps()
+{
+    uint16_t raw = 0;
+    if (!readReg(REG_AVGCURRENT, raw))
         return 0.0f;
     return (int16_t)raw * CURRENT_MA_PER_LSB;
 }

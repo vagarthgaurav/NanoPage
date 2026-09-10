@@ -39,6 +39,7 @@ public:
     float percent(); // state of charge, 0..100
     float voltageMilliVolts();
     float currentMilliAmps();
+    float avgCurrentMilliAmps(); // same LSB as currentMilliAmps(), but chip-averaged over its config-set window
 
     // Snapshot the model's current learned state, for persisting outside the chip.
     LearnedParams learnedParams();
@@ -95,6 +96,7 @@ private:
     static constexpr uint8_t REG_REPSOC = 0x06;    // 1/256 %/LSB
     static constexpr uint8_t REG_VCELL = 0x09;     // 78.125uV/LSB
     static constexpr uint8_t REG_CURRENT = 0x0A;   // signed, 1.5625uV/RSENSE per LSB
+    static constexpr uint8_t REG_AVGCURRENT = 0x0B; // same LSB as REG_CURRENT, averaged over CONFIG.CURR filter window
     static constexpr uint8_t REG_MIXSOC = 0x0D;     // used only to recompute MixCap on restore
     static constexpr uint8_t REG_MIXCAP = 0x0F;     // same LSB as DesignCap
     static constexpr uint8_t REG_FULLCAPREP = 0x10; // same LSB as DesignCap

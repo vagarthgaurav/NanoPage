@@ -27,8 +27,8 @@ public:
     void updateBattery(Display &display, float percent, bool charging) { header_.updateBattery(display, percent, charging); }
 
     // Forwarded to the footer - see Footer::setBatteryState/update.
-    void setFooterState(float voltageMv, float currentMa, bool charging) { footer_.setBatteryState(voltageMv, currentMa, charging); }
-    void updateFooter(Display &display, float voltageMv, float currentMa, bool charging) { footer_.update(display, voltageMv, currentMa, charging); }
+    void setFooterState(float voltageMv, float currentMa, float avgCurrentMa, bool charging) { footer_.setBatteryState(voltageMv, currentMa, avgCurrentMa, charging); }
+    void updateFooter(Display &display, float voltageMv, float currentMa, float avgCurrentMa, bool charging) { footer_.update(display, voltageMv, currentMa, avgCurrentMa, charging); }
 
 private:
     static constexpr uint8_t MAX_PATH_LEN = 128;

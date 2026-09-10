@@ -50,7 +50,7 @@ void setup()
         fileBrowser.updateBattery(display, fuelGauge.percent(), Charger::isCharging()); });
 
     fileBrowser.setBatteryState(fuelGauge.percent(), Charger::isCharging());
-    fileBrowser.setFooterState(fuelGauge.voltageMilliVolts(), fuelGauge.currentMilliAmps(), Charger::isCharging());
+    fileBrowser.setFooterState(fuelGauge.voltageMilliVolts(), fuelGauge.currentMilliAmps(), fuelGauge.avgCurrentMilliAmps(), Charger::isCharging());
 
     // MAX17055 ALRT fires on every ~1% RepSOC change (see FuelGauge::enableSocChangeAlert).
     // Reset the fallback poll timer here too, so it counts from the last real update either way.
@@ -92,7 +92,7 @@ void loop()
     if (now - lastFooterUpdate >= Config::FOOTER_UPDATE_INTERVAL_MS)
     {
         lastFooterUpdate = now;
-        fileBrowser.updateFooter(display, fuelGauge.voltageMilliVolts(), fuelGauge.currentMilliAmps(), Charger::isCharging());
+        fileBrowser.updateFooter(display, fuelGauge.voltageMilliVolts(), fuelGauge.currentMilliAmps(), fuelGauge.avgCurrentMilliAmps(), Charger::isCharging());
     }
 
     if (now - lastFuelGaugeSave >= Config::FUEL_GAUGE_SAVE_INTERVAL_MS)

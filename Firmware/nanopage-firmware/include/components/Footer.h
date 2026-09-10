@@ -13,10 +13,11 @@ public:
 
     // Caches voltage/current/charging without touching the display - call once
     // before the very first draw() so it already has real state to show.
-    void setBatteryState(float voltageMv, float currentMa, bool charging)
+    void setBatteryState(float voltageMv, float currentMa, float avgCurrentMa, bool charging)
     {
         voltageMv_ = voltageMv;
         currentMa_ = currentMa;
+        avgCurrentMa_ = avgCurrentMa;
         charging_ = charging;
     }
 
@@ -27,10 +28,11 @@ public:
     // Updates cached voltage/current/charging and repaints the footer as its
     // own partial refresh - safe independent of whatever else is on screen,
     // since the footer occupies rows the rest of the UI never draws into.
-    void update(Display &display, float voltageMv, float currentMa, bool charging);
+    void update(Display &display, float voltageMv, float currentMa, float avgCurrentMa, bool charging);
 
 private:
     float voltageMv_ = 0.0f;
     float currentMa_ = 0.0f;
+    float avgCurrentMa_ = 0.0f;
     bool charging_ = false;
 };
