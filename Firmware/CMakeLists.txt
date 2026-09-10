@@ -11,4 +11,5 @@ target_sources(app PRIVATE
 	src/rtc.c
 	src/buttons.c
 	src/display.c
+	src/text.c
 )

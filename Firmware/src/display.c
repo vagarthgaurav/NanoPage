@@ -35,6 +35,14 @@ void app_display_get_size(uint16_t *width, uint16_t *height)
 	*height = caps.y_resolution;
 }
 
+enum display_orientation app_display_get_orientation(void)
+{
+	struct display_capabilities caps;
+
+	display_get_capabilities(display_dev, &caps);
+	return caps.current_orientation;
+}
+
 static int app_display_write(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
 			      const uint8_t *buf, size_t buf_size)
 {
@@ -140,7 +148,11 @@ int app_display_clear(bool black)
 	 * white, bit=0 -> black (SSD1680 datasheet, "Write RAM (Black
 	 * White)" 0x24h command description).
 	 */
-	size_t buf_size = DIV_ROUND_UP(width, 8) * height;
+	/* See the buffer-format comment in display.h: vtiled, width bytes
+	 * per 8-row band. height is guaranteed a multiple of 8 (checked by
+	 * ssd16xx_get_capabilities()), so this is exact, no rounding.
+	 */
+	size_t buf_size = (size_t)width * (height / 8);
 	uint8_t *buf = k_malloc(buf_size);
 
 	if (!buf) {

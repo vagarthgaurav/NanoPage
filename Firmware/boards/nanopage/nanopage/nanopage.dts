@@ -83,6 +83,18 @@
 			 */
 			width = <296>;
 			height = <128>;
+			/*
+			 * 180 degrees so the panel reads right-side up for how
+			 * the device is actually held - the natural mounting
+			 * orientation is upside down relative to the driver's
+			 * default. ROTATED_180 stays on the same code path as
+			 * NORMAL in ssd16xx.c (x/y resolution and the vtiled
+			 * buffer layout are unchanged, just the RAM scan
+			 * direction flips) - unlike 90/270, which would swap
+			 * width/height and drop the vtiled layout text.c
+			 * depends on.
+			 */
+			rotation = <180>;
 			busy-gpios = <&gpio0 8 GPIO_ACTIVE_HIGH>;	/* P0.08 */
 
 			/*
