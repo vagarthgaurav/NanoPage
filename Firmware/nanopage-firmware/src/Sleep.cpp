@@ -46,6 +46,14 @@ namespace Sleep
 
         Wire.end();
 
+        // Belt-and-suspenders: listDir() already turns this off after every SD
+        // access and Display::begin() re-clears it on every boot, but GPIO output
+        // state survives SYSTEMOFF - if it were ever still HIGH here, the SD card
+        // would stay powered for the entire sleep period.
+        if (Config::DEBUG_SERIAL && digitalRead(PIN_SD_ON) == HIGH)
+            Serial.println("WARNING: PIN_SD_ON was still HIGH going into deep sleep");
+        digitalWrite(PIN_SD_ON, LOW);
+
         Buttons::armWakeOnPress();
 
         delay(50); // let SPI/GPIO changes settle before cutting power
