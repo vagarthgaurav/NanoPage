@@ -11,7 +11,7 @@ void Display::begin()
     digitalWrite(PIN_SD_ON, LOW); // TPS22929D load switch off - SD unpowered
 
     pinMode(PIN_SD_CS, OUTPUT);
-    digitalWrite(PIN_SD_CS, HIGH); // deselected
+    digitalWrite(PIN_SD_CS, HIGH); // deselected - SdCardStorage::listDir() parks this low once it's actually established the card is unpowered
 
     panel_.init(0); // 0 = don't let GxEPD2 re-run Serial.begin()
     panel_.setRotation(3); // landscape

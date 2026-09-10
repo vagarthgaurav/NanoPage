@@ -8,14 +8,26 @@ namespace Config
 {
     constexpr uint32_t FUEL_GAUGE_POLL_INTERVAL_MS = 1800000; // 30 minutes - fallback only, the ALRT interrupt drives normal updates
     constexpr uint32_t FOOTER_UPDATE_INTERVAL_MS = 60000; // 1 minute - footer's voltage/current are debug data, not event-driven like the header's SoC
-    constexpr uint16_t FULL_REFRESH_EVERY = 25; // partial e-paper updates ghost - clear the panel this often
+    constexpr uint16_t FULL_REFRESH_EVERY = 15; // partial e-paper updates ghost - clear the panel this often
     constexpr uint32_t SLEEP_TIMEOUT_MS = 1800000; // 30 minutes of no button activity
     constexpr uint32_t FUEL_GAUGE_SAVE_INTERVAL_MS = 3600000; // 1 hour - flash wear vs. freshness
 
     // Debug aid for watching charging behavior live - periodic full register
     // dump instead of just the CYCLE COMPLETE/DEPLETED before/after snapshots.
     // Gated on DEBUG_SERIAL in main.cpp; irrelevant when that's false.
-    constexpr uint32_t DEBUG_REGISTER_DUMP_INTERVAL_MS = 5000; // 5 seconds
+    //
+    // CONFIRMED on hardware (2026-09-10): this periodic Serial print burst
+    // (~17 registers' worth of I2C reads + prints) is what breaks the
+    // periodic full refresh - not SD_CS handling, not the refresh-gap value,
+    // both of which were tried and ruled out first. Flipped back to 5000 and
+    // back to failing, then silenced again and back to working - a clean
+    // A/B on hardware. Matches this project's older, separately-documented
+    // finding that print traffic (not USB enumeration, not an active reader)
+    // correlates with this panel's refresh reliability - see
+    // project_sd_card_backpowering_idle_current memory. Silenced
+    // (effectively never fires) until this gets a real fix - e.g. moving the
+    // dump off the shared timer, or only ever triggering it on demand.
+    constexpr uint32_t DEBUG_REGISTER_DUMP_INTERVAL_MS = 0xFFFFFFFF;
 
     // Gates every Serial.print/println in main.cpp, including Serial.begin()
     // itself and the boot-time wait for a terminal. Flip to false for
