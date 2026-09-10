@@ -56,6 +56,7 @@
 		sw-action = &button_action;
 		sw-next = &button_next;
 		sw-prev = &button_prev;
+		rtc0 = &rtc_ext;
 	};
 };
 
@@ -92,6 +93,17 @@
 	pinctrl-0 = <&i2c1_default>;
 	pinctrl-1 = <&i2c1_sleep>;
 	pinctrl-names = "default", "sleep";
+
+	/*
+	 * PCF85063 RTC, fixed I2C address 0x51. Zephyr's in-tree
+	 * nxp,pcf85063a binding/driver is used as-is (same register
+	 * map as the plain PCF85063 on this board).
+	 */
+	rtc_ext: rtc@51 {
+		compatible = "nxp,pcf85063a";
+		reg = <0x51>;
+		int1-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
+	};
 };
 
 /* E-paper panel (SSD1680) + microSD card, own CS line each */
@@ -135,7 +147,6 @@
  * that hasn't been added to the board file yet:
  *
  *   P0.03  charger status        - BQ25170 status output
- *   P0.02  RTC interrupt         - PCF85063 INT, needs int-gpios on the RTC node
  *   P0.06  display data/command  - SSD1680 dc-gpios
  *   P0.05  display reset         - SSD1680 reset-gpios
  *   P0.08  display busy          - SSD1680 busy-gpios

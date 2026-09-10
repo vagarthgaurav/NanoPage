@@ -2,14 +2,18 @@
 
 #include <zephyr/kernel.h>
 
+#include "rtc.h"
+
 int main(void)
 {
-	unsigned int count = 0;
+	printk("NanoPage: RTC + buttons bring-up.\n");
 
-	printk("NanoPage: first flash over SWD, board is alive.\n");
+	if (app_rtc_init()) {
+		return 0;
+	}
 
 	while (1) {
-		printk("heartbeat %u\n", count++);
+		app_rtc_log_time();
 		k_sleep(K_SECONDS(1));
 	}
 
