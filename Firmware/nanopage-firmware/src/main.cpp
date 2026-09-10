@@ -78,6 +78,7 @@ void loop()
 {
     static uint32_t lastFuelGaugeSave = 0;
     static uint32_t lastFooterUpdate = 0;
+    static uint32_t lastRegisterDump = 0;
     delay(1000); // lets FreeRTOS tickless idle sleep instead of busy-polling
 
     uint32_t now = millis();
@@ -98,6 +99,12 @@ void loop()
     {
         lastFuelGaugeSave = now;
         fuelGauge.saveLearnedParamsToFlash();
+    }
+
+    if (Config::DEBUG_SERIAL && now - lastRegisterDump >= Config::DEBUG_REGISTER_DUMP_INTERVAL_MS)
+    {
+        lastRegisterDump = now;
+        fuelGauge.debugDumpRegisters();
     }
 
     if (Buttons::msSinceActivity() >= Config::SLEEP_TIMEOUT_MS)

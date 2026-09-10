@@ -12,6 +12,11 @@ namespace Config
     constexpr uint32_t SLEEP_TIMEOUT_MS = 1800000; // 30 minutes of no button activity
     constexpr uint32_t FUEL_GAUGE_SAVE_INTERVAL_MS = 3600000; // 1 hour - flash wear vs. freshness
 
+    // Debug aid for watching charging behavior live - periodic full register
+    // dump instead of just the CYCLE COMPLETE/DEPLETED before/after snapshots.
+    // Gated on DEBUG_SERIAL in main.cpp; irrelevant when that's false.
+    constexpr uint32_t DEBUG_REGISTER_DUMP_INTERVAL_MS = 5000; // 5 seconds
+
     // Gates every Serial.print/println in main.cpp, including Serial.begin()
     // itself and the boot-time wait for a terminal. Flip to false for
     // field/production builds.
@@ -22,7 +27,7 @@ namespace Config
     // way with DEBUG_SERIAL=false whether or not a host was actively reading
     // the port. The actual print traffic (not USB enumeration, not an active
     // reader) is what correlates with working vs. failing - see Display.h.
-    constexpr bool DEBUG_SERIAL = false;
+    constexpr bool DEBUG_SERIAL = true;
 
     // One-shot: forces the fuel gauge to discard its corrupted learned FullCapRep
     // and restore from FACTORY_SEED instead. Flip back to false and reflash once
