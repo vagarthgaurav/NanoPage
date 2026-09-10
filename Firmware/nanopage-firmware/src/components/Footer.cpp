@@ -20,8 +20,8 @@ void Footer::draw(Display &display)
     int16_t baseline = y + fonts.getFontAscent() + 2;
 
     char text[32];
-    snprintf(text, sizeof(text), "%dmV  %dmA %s",
-             (int)voltageMv_, (int)currentMa_, charging_ ? "CHG" : "DSG");
+    snprintf(text, sizeof(text), "%dmV  %.2fmA %s",
+             (int)voltageMv_, (double)currentMa_, charging_ ? "CHG" : "DSG");
     fonts.setCursor(MARGIN, baseline);
     fonts.print(text);
 }
