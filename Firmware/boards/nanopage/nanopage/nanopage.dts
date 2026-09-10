@@ -3,9 +3,9 @@
  *
  * Pin assignments below come from the module pinout table in the
  * project README (E73-2G4M08S1C, U8 in the schematic). Signals that
- * belong to a driver which hasn't been added yet (RTC, fuel gauge,
- * display, SD card detect, charger/USB status lines) are left
- * unwired here on purpose - see the comment block at the bottom.
+ * belong to a driver which hasn't been added yet (fuel gauge, SD card
+ * detect, charger/USB status lines) are left unwired here on purpose -
+ * see the comment block at the bottom.
  */
 
 /dts-v1/;
@@ -21,6 +21,7 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
+		zephyr,display = &epd_panel;
 	};
 
 	buttons {
@@ -50,6 +51,53 @@
 		regulator-name = "sdhc-pwr";
 		enable-gpios = <&gpio1 11 GPIO_ACTIVE_HIGH>;
 		regulator-boot-off;
+	};
+
+	/*
+	 * GDEY029T94 e-paper panel (128x296, SSD1680 controller) on spi3,
+	 * CS index 0 there (see cs-gpios on &spi3 below). Zephyr's in-tree
+	 * SSD16XX driver talks to it over the generic MIPI DBI Mode C
+	 * (4-wire SPI) bridge, so the actual SPI bus is wrapped in a
+	 * zephyr,mipi-dbi-spi node that owns the DC/reset lines; reg = <0>
+	 * on the panel node below selects cs-gpios[0] on spi3 through
+	 * that wrapper.
+	 */
+	display_mipi: display-mipi {
+		compatible = "zephyr,mipi-dbi-spi";
+		spi-dev = <&spi3>;
+		dc-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;		/* P0.06 */
+		reset-gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;	/* P0.05 */
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		epd_panel: ssd1680@0 {
+			compatible = "solomon,ssd1680";
+			reg = <0>;
+			mipi-max-frequency = <4000000>;
+			/*
+			 * In this driver "width" is the gate-line count
+			 * (SSD1680 max 296) and "height" is the source-line
+			 * count (max 176) - not screen columns/rows. Panel
+			 * is 296(H, gate) x 128(V, source) per the GDEY029T94
+			 * datasheet.
+			 */
+			width = <296>;
+			height = <128>;
+			busy-gpios = <&gpio0 8 GPIO_ACTIVE_HIGH>;	/* P0.08 */
+
+			/*
+			 * Enables the SSD1680's faster/partial ("Mode 2")
+			 * waveform. Empty on purpose: this chip's OTP
+			 * already stores both the full and Mode 2 waveforms,
+			 * selected purely via an UPDATE_CTRL2 register bit
+			 * (see quirks_solomon_ssd1680.ctrl2_partial in
+			 * ssd16xx.c) - no custom LUT bytes needed. Presence
+			 * of this node is what the driver checks, per its
+			 * SSD16XX_DEFINE()/DT_CHILD(n, partial) macro.
+			 */
+			partial {
+			};
+		};
 	};
 
 	aliases {
@@ -147,9 +195,6 @@
  * that hasn't been added to the board file yet:
  *
  *   P0.03  charger status        - BQ25170 status output
- *   P0.06  display data/command  - SSD1680 dc-gpios
- *   P0.05  display reset         - SSD1680 reset-gpios
- *   P0.08  display busy          - SSD1680 busy-gpios
  *   P0.12  SD card detect        - card-detect switch
  *   P0.17  USB detect            - VBUS sense, separate from the native USBD peripheral
  *   P0.13  fuel gauge alert      - MAX17055 alert-gpios
