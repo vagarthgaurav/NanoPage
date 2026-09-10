@@ -1,0 +1,16 @@
+identifier: nanopage
+name: NanoPage E-Reader
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+ram: 256
+flash: 1024
+supported:
+  - adc
+  - gpio
+  - i2c
+  - spi
+  - watchdog
+  - counter

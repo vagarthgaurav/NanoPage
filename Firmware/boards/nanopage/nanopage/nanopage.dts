@@ -1,0 +1,149 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Pin assignments below come from the module pinout table in the
+ * project README (E73-2G4M08S1C, U8 in the schematic). Signals that
+ * belong to a driver which hasn't been added yet (RTC, fuel gauge,
+ * display, SD card detect, charger/USB status lines) are left
+ * unwired here on purpose - see the comment block at the bottom.
+ */
+
+/dts-v1/;
+#include <nordic/nrf52840_qiaa.dtsi>
+#include "nanopage-pinctrl.dtsi"
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+/ {
+	model = "NanoPage E-Reader";
+	compatible = "nanopage,nanopage";
+
+	chosen {
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,code-partition = &slot0_partition;
+	};
+
+	buttons {
+		compatible = "gpio-keys";
+
+		/* P0.09/NFC1 - needs &uicr nfct-pins-as-gpios below to read as GPIO */
+		button_action: button_action {
+			gpios = <&gpio0 9 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_ENTER>;
+		};
+
+		/* P0.10/NFC2 - needs &uicr nfct-pins-as-gpios below to read as GPIO */
+		button_next: button_next {
+			gpios = <&gpio0 10 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_RIGHT>;
+		};
+
+		button_prev: button_prev {
+			gpios = <&gpio0 24 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_LEFT>;
+		};
+	};
+
+	/* microSD load switch enable, P1.11 */
+	regulator_sdhc: regulator-sdhc-pwr {
+		compatible = "regulator-fixed";
+		regulator-name = "sdhc-pwr";
+		enable-gpios = <&gpio1 11 GPIO_ACTIVE_HIGH>;
+		regulator-boot-off;
+	};
+
+	aliases {
+		sw-action = &button_action;
+		sw-next = &button_next;
+		sw-prev = &button_prev;
+	};
+};
+
+/* Externally regulated 3.3V feeds both VDD and VDDH - REG0 (VDDH->VDD
+ * boost path) isn't in the power path, so it's left disabled (SoC
+ * default). REG1 in DC/DC mode is the standard efficiency win. */
+&reg1 {
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
+
+&uicr {
+	/* No NFC antenna on this board - P0.09/P0.10 are Action/Next buttons */
+	nfct-pins-as-gpios;
+	/* P0.18 is the dedicated reset button pin */
+	gpio-as-nreset;
+};
+
+&gpiote {
+	status = "okay";
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&gpio1 {
+	status = "okay";
+};
+
+/* RTC (PCF85063) + fuel gauge (MAX17055) */
+&i2c1 {
+	compatible = "nordic,nrf-twim";
+	status = "okay";
+	pinctrl-0 = <&i2c1_default>;
+	pinctrl-1 = <&i2c1_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
+/* E-paper panel (SSD1680) + microSD card, own CS line each */
+&spi3 {
+	compatible = "nordic,nrf-spim";
+	status = "okay";
+	cs-gpios = <&gpio0 26 GPIO_ACTIVE_LOW>,	/* display CS, P0.26 */
+		   <&gpio1 9 GPIO_ACTIVE_LOW>;		/* SD card CS, P1.09 */
+	pinctrl-0 = <&spi3_default>;
+	pinctrl-1 = <&spi3_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/*
+		 * No bootloader yet (flashed directly over SWD per the
+		 * firmware architecture decision in .claude/CLAUDE.md), so
+		 * the app image starts at 0x0. Still named slot0/image-0
+		 * so adding MCUboot later (for OTA/DFU) is a partition
+		 * resize, not a rename.
+		 */
+		slot0_partition: partition@0 {
+			label = "image-0";
+			reg = <0x00000000 DT_SIZE_K(992)>;
+		};
+
+		storage_partition: partition@f8000 {
+			label = "storage";
+			reg = <0x000f8000 DT_SIZE_K(32)>;
+		};
+	};
+};
+
+/*
+ * Pins not yet wired to a devicetree node - each belongs to a driver
+ * that hasn't been added to the board file yet:
+ *
+ *   P0.03  charger status        - BQ25170 status output
+ *   P0.02  RTC interrupt         - PCF85063 INT, needs int-gpios on the RTC node
+ *   P0.06  display data/command  - SSD1680 dc-gpios
+ *   P0.05  display reset         - SSD1680 reset-gpios
+ *   P0.08  display busy          - SSD1680 busy-gpios
+ *   P0.12  SD card detect        - card-detect switch
+ *   P0.17  USB detect            - VBUS sense, separate from the native USBD peripheral
+ *   P0.13  fuel gauge alert      - MAX17055 alert-gpios
+ *   P1.00  charger power-good    - BQ25170 PG output
+ *
+ * P0.15, P0.20, P0.22, P0.04, P0.07, P1.02, P1.04, P1.06, P1.10 are NC
+ * per the schematic and intentionally left out.
+ */

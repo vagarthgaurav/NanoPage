@@ -1,0 +1,6 @@
+board:
+  name: nanopage
+  full_name: NanoPage E-Reader
+  vendor: nanopage
+  socs:
+  - name: nrf52840

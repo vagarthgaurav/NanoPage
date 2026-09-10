@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+
+CONFIG_ARM_MPU=y
+CONFIG_HW_STACK_PROTECTION=y
+
+CONFIG_GPIO=y
+
+# No debug UART is routed to any pin on this board - console goes over
+# RTT instead, which works fine through the CMSIS-DAP/OpenOCD SWD link.
+CONFIG_USE_SEGGER_RTT=y
+CONFIG_CONSOLE=y
+CONFIG_RTT_CONSOLE=y
