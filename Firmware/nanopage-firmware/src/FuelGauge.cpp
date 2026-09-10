@@ -349,6 +349,16 @@ void FuelGauge::enableAlertInterrupt(void (*onAlert)())
 
     pinMode(PIN_FUEL_ALERT, INPUT_PULLUP); // open-drain, active low
     attachInterrupt(PIN_FUEL_ALERT, onFuelAlertEdge, FALLING | ISR_DEFERRED);
+
+    // FALLING only fires on a fresh edge - if dSOCi (or another Aen source) was
+    // already asserted from before this boot (the chip stays powered through an
+    // MCU reset/sleep, unlike this interrupt registration), the pin is already
+    // low and no edge will ever come. Without this, the alert-driven display
+    // update silently stops firing until the next full percent swings back up
+    // past a boundary, or the 30-minute fallback poll (which also never clears
+    // the flag) papers over it.
+    if (digitalRead(PIN_FUEL_ALERT) == LOW)
+        onFuelAlertEdge();
 }
 
 FuelGauge::LearnedParams FuelGauge::learnedParams()
