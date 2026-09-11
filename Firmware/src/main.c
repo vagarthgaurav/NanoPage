@@ -77,7 +77,7 @@ int main(void)
 	app_fuel_gauge_init();
 	app_power_init();
 
-	if (app_text_init(APP_TEXT_FONT_SMALL) == 0) {
+	if (app_text_init(APP_TEXT_FONT_TAMZEN) == 0) {
 		uint16_t cols;
 
 		app_text_get_grid(&cols, &status_row);

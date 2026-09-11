@@ -13,6 +13,7 @@ target_sources(app PRIVATE
 	src/buttons.c
 	src/display.c
 	src/text.c
+	src/font_tamzen.c
 	src/max17055.c
 	src/fuel_gauge.c
 	src/power.c

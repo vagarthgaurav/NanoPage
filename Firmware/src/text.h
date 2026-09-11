@@ -26,6 +26,12 @@ enum app_text_font {
 	APP_TEXT_FONT_SMALL = 0,  /* 10x16px cells */
 	APP_TEXT_FONT_MEDIUM = 1, /* 15x24px cells */
 	APP_TEXT_FONT_LARGE = 2,  /* 20x32px cells */
+	APP_TEXT_FONT_TAMZEN = 3, /* 6x16px cells - Tamzen6x12r.bdf, bottom-
+				   * padded from its native 12px height to the
+				   * next multiple of 8 (see font_tamzen.h).
+				   * Chosen size for menu/list UI text - see
+				   * the font-selection note in text.c.
+				   */
 };
 
 /*

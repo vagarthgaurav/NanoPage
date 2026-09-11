@@ -7,6 +7,7 @@
 #include <zephyr/display/cfb.h>
 
 #include "display.h"
+#include "font_tamzen.h"
 #include "text.h"
 
 /*
@@ -38,7 +39,48 @@
  */
 STRUCT_SECTION_START_EXTERN(cfb_font);
 
-#define APP_TEXT_NUM_FONTS 3
+/*
+ * Font selection for menu/list UI text (as opposed to the built-in
+ * DroidSansMono-derived fonts above, still used for APP_TEXT_FONT_SMALL/
+ * MEDIUM/LARGE): evaluated Terminus and Tamzen, two open-source fixed-
+ * pixel bitmap font families, side by side at matching cell sizes.
+ * Grayscale (the SSD1680 does support a real 4-gray mode via a custom
+ * waveform LUT, confirmed against GxEPD2_4G's own source/notes - contrary
+ * to an earlier, incomplete read of the datasheets alone) was ruled out
+ * for this: GxEPD2_4G's release notes state this exact panel
+ * ("GDEM029T94", the same physical panel as GDEY029T94 under a different
+ * reseller's part number) has no partial-refresh support in grey mode, so
+ * any grayscale text would cost a full ~1.8s flashing refresh on every
+ * update instead of text.c's cheap per-row partial refresh - not
+ * acceptable for menu/list navigation, which redraws often. Chose Tamzen
+ * at 6x16 (its native 6x12 glyph, bottom-padded to the next multiple of
+ * 8 - see font_tamzen.h) over Terminus for its softer, more book-like
+ * letterforms, confirmed legible on the real panel at this size.
+ *
+ * Noto Sans was also evaluated as a book-text candidate (same partial-
+ * refresh reasoning above rules out grayscale for book pages too, once
+ * page turns need to stay on the fast/partial waveform rather than a full
+ * refresh every turn) but shelved for now: it's a proportional outline
+ * font with no runtime rasterizer in this firmware, so using it meant
+ * force-fitting it into a fixed-width bitmap cell like Tamzen. At a small
+ * size (5x8) that came out close to illegible - its outline isn't hinted
+ * for that pixel density the way Tamzen's native small sizes are - and at
+ * a size that was actually legible (16x24) it was judged too large for
+ * body text. Sticking with Tamzen for both menu/list and book text for
+ * now; revisit the book font separately later if Tamzen doesn't hold up
+ * for long-form reading.
+ */
+
+/* Number of Zephyr built-in CFB fonts app_text_init() requires to be linked
+ * in (font1016/font1524/font2032 - checked via STRUCT_SECTION_COUNT, not
+ * the total font count below, since font_tamzen_6x16 isn't part of that
+ * iterable section - see font_tamzen.c for why).
+ */
+#define APP_TEXT_NUM_BUILTIN_FONTS 3
+/* Total selectable fonts, built-in + font_tamzen_6x16 - the valid range
+ * for enum app_text_font.
+ */
+#define APP_TEXT_NUM_FONTS 4
 /* 128px panel height / 16px smallest font row = 8 rows, max across fonts. */
 #define APP_TEXT_MAX_ROWS 8
 
@@ -100,6 +142,10 @@ static struct {
 
 static inline const struct cfb_font *font_entry(enum app_text_font font)
 {
+	if (font == APP_TEXT_FONT_TAMZEN) {
+		return &font_tamzen_6x16;
+	}
+
 	return &TYPE_SECTION_START(cfb_font)[font];
 }
 
@@ -237,10 +283,10 @@ int app_text_init(enum app_text_font font)
 	int ret;
 
 	STRUCT_SECTION_COUNT(cfb_font, &numof_fonts);
-	if (numof_fonts < APP_TEXT_NUM_FONTS) {
+	if (numof_fonts < APP_TEXT_NUM_BUILTIN_FONTS) {
 		printk("text: expected %d built-in CFB fonts, found %u - "
 		       "is CONFIG_CHARACTER_FRAMEBUFFER_USE_DEFAULT_FONTS set?\n",
-		       APP_TEXT_NUM_FONTS, numof_fonts);
+		       APP_TEXT_NUM_BUILTIN_FONTS, numof_fonts);
 		return -ENODEV;
 	}
 
