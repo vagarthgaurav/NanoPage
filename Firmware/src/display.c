@@ -4,11 +4,44 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/mipi_dbi.h>
 #include <zephyr/sys/util.h>
 
 #include "display.h"
 
 static const struct device *const display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+
+/*
+ * Talks to the panel directly over MIPI DBI for app_display_deep_sleep() -
+ * see the long comment on that function in display.h for why this bypasses
+ * the Zephyr display API. mipi_dev/dbi_cfg are built to exactly match what
+ * the ssd16xx driver itself constructs internally (SSD16XX_DEFINE() in
+ * ssd16xx.c: .mode = MIPI_DBI_MODE_SPI_4WIRE, same SPI_OP_MODE_MASTER |
+ * SPI_WORD_SET(8) | SPI_HOLD_ON_CS | SPI_LOCK_ON operation flags) - this
+ * isn't a separate/competing bus config, just the same one, independently
+ * expressed since the driver's copy is private to its own .c file.
+ */
+static const struct device *const epd_mipi_dev =
+	DEVICE_DT_GET(DT_PARENT(DT_CHOSEN(zephyr_display)));
+static const struct gpio_dt_spec epd_busy_gpio =
+	GPIO_DT_SPEC_GET(DT_CHOSEN(zephyr_display), busy_gpios);
+static const struct mipi_dbi_config epd_dbi_cfg = {
+	.mode = MIPI_DBI_MODE_SPI_4WIRE,
+	.config = MIPI_DBI_SPI_CONFIG_DT(DT_CHOSEN(zephyr_display),
+					  SPI_OP_MODE_MASTER | SPI_WORD_SET(8) |
+					  SPI_HOLD_ON_CS | SPI_LOCK_ON, 0),
+};
+
+/* SSD1680 datasheet, Table 7-1 "Command Table": command 0x10, data A[1:0].
+ * 00 = Normal mode (POR), 01 = Deep Sleep Mode 1 (retains RAM, ~1uA typ),
+ * 11 = Deep Sleep Mode 2 (RAM not retained, ~0.7uA typ). Mode 2 is strictly
+ * better for us: nothing here ever relies on Deep Sleep retaining RAM,
+ * since waking always means a full reboot and a from-scratch re-init
+ * anyway (see display.h).
+ */
+#define SSD1680_CMD_DEEP_SLEEP_MODE 0x10U
+#define SSD1680_DEEP_SLEEP_MODE_2   0x03U
 
 int app_display_init(void)
 {
@@ -166,4 +199,27 @@ int app_display_clear(bool black)
 	k_free(buf);
 
 	return ret;
+}
+
+int app_display_deep_sleep(void)
+{
+	uint8_t data = SSD1680_DEEP_SLEEP_MODE_2;
+	int err;
+
+	/* Mirrors the driver's own ssd16xx_busy_wait() convention: don't
+	 * issue a new command while the panel is still finishing the
+	 * previous one. In practice this is already guaranteed by the
+	 * refresh functions above blocking until BUSY clears, but that's
+	 * an invariant of *this* app's call order, not of this function -
+	 * keep the check.
+	 */
+	while (gpio_pin_get_dt(&epd_busy_gpio) > 0) {
+		k_msleep(1);
+	}
+
+	err = mipi_dbi_command_write(epd_mipi_dev, &epd_dbi_cfg,
+				      SSD1680_CMD_DEEP_SLEEP_MODE, &data, 1);
+	mipi_dbi_release(epd_mipi_dev, &epd_dbi_cfg);
+
+	return err;
 }

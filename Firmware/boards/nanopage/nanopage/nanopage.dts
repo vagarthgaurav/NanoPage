@@ -122,7 +122,14 @@
 
 /* Externally regulated 3.3V feeds both VDD and VDDH - REG0 (VDDH->VDD
  * boost path) isn't in the power path, so it's left disabled (SoC
- * default). REG1 in DC/DC mode is the standard efficiency win. */
+ * default). REG1 in DC/DC mode is the standard efficiency win.
+ *
+ * Tested LDO vs DCDC directly (2026-09-11) while chasing an unexplained
+ * ~1-3mA idle current shown by the fuel gauge: no measurable difference
+ * either way, so DCDC is not implicated and stays on for its real
+ * benefit during active/refresh periods. See project memory for the
+ * full current-draw investigation and what's still open.
+ */
 &reg1 {
 	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
 };

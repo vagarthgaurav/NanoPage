@@ -15,4 +15,5 @@ target_sources(app PRIVATE
 	src/text.c
 	src/max17055.c
 	src/fuel_gauge.c
+	src/power.c
 )

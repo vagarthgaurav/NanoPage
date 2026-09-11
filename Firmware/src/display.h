@@ -106,4 +106,30 @@ int app_display_refresh_partial(uint16_t x, uint16_t y, uint16_t width, uint16_t
  */
 int app_display_clear(bool black);
 
+/*
+ * Puts the SSD1680 into its lowest-power Deep Sleep state (~0.7uA typ,
+ * vs. ~20uA typ just sitting idle after a normal refresh - see the
+ * datasheet's Isleep_VCI vs Idsleep_VCI2). Bypasses Zephyr's display API
+ * entirely: the in-tree ssd16xx driver never issues this command (its
+ * source has no reference to it), so there's no display_*() call that
+ * reaches it. This talks to the panel directly over the same MIPI DBI
+ * bus/config the driver itself builds from devicetree.
+ *
+ * The SSD1680 datasheet is explicit that exiting Deep Sleep requires a
+ * hardware RES# pulse, and that the driver's own SW_RESET command
+ * (0x12) does not affect it. This function does not perform that
+ * reset - it's only safe to call right before the whole board loses
+ * power (nRF52840 System OFF), because the *next* app_display_init()
+ * call, at the next boot, naturally does a fresh hardware reset as
+ * part of the driver's normal init - no special-cased wake path is
+ * needed or provided. Calling this mid-runtime, expecting the panel to
+ * keep working afterwards without a reboot, will leave it unusable:
+ * the driver's cached profile/blanking state has no idea the
+ * controller lost its configuration, so it won't redo the
+ * SW_RESET+LUT-reload a real wake requires.
+ *
+ * Returns 0 on success, negative errno on failure.
+ */
+int app_display_deep_sleep(void);
+
 #endif /* APP_DISPLAY_H_ */
