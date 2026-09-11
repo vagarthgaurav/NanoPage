@@ -3,20 +3,40 @@
  */
 
 &pinctrl {
-	/* Shared SPI bus: e-paper panel + microSD card (own CS lines each) */
+	/*
+	 * Shared SPI bus: e-paper panel + microSD card (own CS lines each).
+	 * MISO is its own group, separate from SCK/MOSI, so bias-pull-down
+	 * applies to only that pin: MISO is a shared input driven by
+	 * whichever slave has CS asserted, and goes undriven (high-Z) on
+	 * both slaves whenever the bus is idle - which is most of the time.
+	 * Without a pull, PIN_CNF reads DIR=Input/INPUT=Connected/PULL=
+	 * Disabled the whole time the bus sits idle: a genuinely floating
+	 * input, confirmed live via a temporary PIN_CNF scan (2026-09-11,
+	 * see .claude/CLAUDE.md's "Open investigation" note) - a real,
+	 * previously-untested candidate for the ~1-2.5mA idle current.
+	 * SCK/MOSI are master-driven outputs, so they don't have this
+	 * problem and don't need a pull.
+	 */
 	spi3_default: spi3_default {
 		group1 {
 			psels = <NRF_PSEL(SPIM_SCK, 0, 31)>,
-				<NRF_PSEL(SPIM_MOSI, 0, 30)>,
-				<NRF_PSEL(SPIM_MISO, 0, 29)>;
+				<NRF_PSEL(SPIM_MOSI, 0, 30)>;
+		};
+		group2 {
+			psels = <NRF_PSEL(SPIM_MISO, 0, 29)>;
+			bias-pull-down;
 		};
 	};
 
 	spi3_sleep: spi3_sleep {
 		group1 {
 			psels = <NRF_PSEL(SPIM_SCK, 0, 31)>,
-				<NRF_PSEL(SPIM_MOSI, 0, 30)>,
-				<NRF_PSEL(SPIM_MISO, 0, 29)>;
+				<NRF_PSEL(SPIM_MOSI, 0, 30)>;
+			low-power-enable;
+		};
+		group2 {
+			psels = <NRF_PSEL(SPIM_MISO, 0, 29)>;
+			bias-pull-down;
 			low-power-enable;
 		};
 	};
