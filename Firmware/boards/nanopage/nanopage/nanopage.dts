@@ -164,6 +164,32 @@
 		reg = <0x51>;
 		int1-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
 	};
+
+	/*
+	 * MAX17055, fixed I2C address 0x36. compatible = "nanopage,max17055"
+	 * (own from-scratch driver, src/max17055.c) rather than upstream's
+	 * "maxim,max17055" - see the top-of-file comment there for why.
+	 * rsense-mohms/i-chg-term come from the schematic (R11 = 10m sense
+	 * resistor; R7 = 1k on ISET -> 300mA per the BQ25170's printed
+	 * I_CHG = 300AOhms/R_ISET formula, i-chg-term uses the conventional
+	 * C/10 termination current). design-voltage/desired-voltage = 4200mV
+	 * matches the charger's VSET resistor (R6 = 27k -> 4.20V per the
+	 * schematic's printed VSET table). v-empty/v-recover = 3300mV/3880mV
+	 * matches the guide's own worked example (Section "MAX17055 INI File
+	 * Format", VEmpty = 0xa561 decodes to exactly these two values).
+	 */
+	fuel_gauge_ext: fuel-gauge@36 {
+		compatible = "nanopage,max17055";
+		reg = <0x36>;
+		rsense-mohms = <10>;
+		design-capacity = <320>;
+		design-voltage = <4200>;
+		desired-voltage = <4200>;
+		desired-charging-current = <300>;
+		i-chg-term = <32>;
+		v-empty = <3300>;
+		v-recover = <3880>;
+	};
 };
 
 /* E-paper panel (SSD1680) + microSD card, own CS line each */

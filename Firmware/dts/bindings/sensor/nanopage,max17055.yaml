@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Deliberately a separate compatible from upstream's "maxim,max17055" -
+# this board uses its own from-scratch driver (src/max17055.c), not
+# Zephyr's in-tree one. Reason: the in-tree driver's init() runs
+# automatically at POST_KERNEL and on every POR unconditionally does a
+# basic EZ-config and clears the POR bit itself, with no hook to load
+# previously-learned impedance-track parameters from flash first. See the
+# top-of-file comment in src/max17055.c for the full explanation.
+
+description: MAX17055 fuel gauge, app-driven configure/restore (NanoPage board)
+
+compatible: "nanopage,max17055"
+
+include: [i2c-device.yaml]
+
+properties:
+  rsense-mohms:
+    type: int
+    required: true
+    description: Current-sense resistor value in milliohms (R11 on this board).
+
+  design-capacity:
+    type: int
+    required: true
+    description: Battery design (label) capacity in mAh.
+
+  design-voltage:
+    type: int
+    required: true
+    description: >
+      Battery design (charge) voltage in mV. Selects which ModelCfg/dPAcc
+      constants the "Custom Short INI" sequence uses (>4275mV vs <=4275mV
+      per the MAX17055 Software Implementation Guide).
+
+  desired-voltage:
+    type: int
+    required: true
+    description: Desired charge voltage in mV.
+
+  desired-charging-current:
+    type: int
+    required: true
+    description: Desired charging current in mA.
+
+  i-chg-term:
+    type: int
+    required: true
+    description: Charge termination current in mA.
+
+  v-empty:
+    type: int
+    required: true
+    description: Empty-battery voltage threshold in mV (VEmpty register VE field).
+
+  v-recover:
+    type: int
+    required: true
+    description: >
+      Voltage the cell must recover above before empty-detection resets, in
+      mV (VEmpty register VR field).

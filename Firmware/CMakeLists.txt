@@ -2,6 +2,7 @@
 cmake_minimum_required(VERSION 3.20.0)
 
 list(APPEND BOARD_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+list(APPEND DTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(nanopage)
@@ -12,4 +13,6 @@ target_sources(app PRIVATE
 	src/buttons.c
 	src/display.c
 	src/text.c
+	src/max17055.c
+	src/fuel_gauge.c
 )
