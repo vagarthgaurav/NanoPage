@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "font_siji.h"
+
 /*
  * Text-grid UI layer on top of the SSD1680 e-paper panel (display.c/.h).
  *
@@ -70,6 +72,20 @@ int app_text_draw_row(uint16_t row, const char *str);
  * cell's column range). Returns -EINVAL if row/col is out of range.
  */
 int app_text_draw_cell(uint16_t row, uint16_t col, char c);
+
+/*
+ * Draw a siji icon glyph (font_siji.h) at a raw pixel x-offset within a
+ * grid row - not column-aligned to the current text font's cell width,
+ * since icons (12px wide) don't share a cell size with any text font
+ * here. Icons are always 12x16px regardless of the active text font;
+ * vertical placement is always the top 16px of the row, which only
+ * lines up exactly with row content for APP_TEXT_FONT_SMALL/TAMZEN (both
+ * 16px tall) - under MEDIUM/LARGE the icon just occupies the top of a
+ * taller cell. Marks the row dirty (cropped to the icon's column range).
+ * Returns -EINVAL if row is out of range or icon is not a valid
+ * app_text_icon value.
+ */
+int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon);
 
 /*
  * Move (or hide) the blinking text cursor, rendered as an inverted

@@ -354,6 +354,33 @@ int app_text_draw_cell(uint16_t row, uint16_t col, char c)
 	return 0;
 }
 
+/*
+ * draw_glyph() falls back to ' ' for a char outside f->first_char..
+ * f->last_char - safe for a text font (space is always in range), but
+ * font_siji_icons only spans 0..APP_TEXT_ICON_BATTERY_MAX (12), so ' '
+ * (32) would itself be out of range and read past the glyph array. Bounds-
+ * check the icon here instead of relying on that fallback.
+ */
+int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon)
+{
+	uint16_t py;
+
+	if (!fb_buf || row >= grid_rows) {
+		return -EINVAL;
+	}
+
+	if (icon > APP_TEXT_ICON_BATTERY_MAX) {
+		return -EINVAL;
+	}
+
+	py = row * font_entry(cur_font)->height;
+
+	draw_glyph(&font_siji_icons, (unsigned char)icon, x, py);
+	mark_dirty(row, x, x + font_siji_icons.width);
+
+	return 0;
+}
+
 int app_text_draw_row(uint16_t row, const char *str)
 {
 	size_t len;
