@@ -56,11 +56,13 @@ enum {
 	REG_COMMAND = 0x60,
 	REG_HIBCFG = 0xBA,
 	REG_MODELCFG = 0xDB,
+	REG_CONFIG = 0x1D,
 };
 
 #define STATUS_POR BIT(1)
 #define FSTAT_DNR BIT(0)
 #define MODELCFG_REFRESH BIT(15)
+#define CONFIG_ETHRM BIT(4)
 
 struct max17055_config {
 	struct i2c_dt_spec i2c;
@@ -218,6 +220,23 @@ int max17055_configure(const struct device *dev, const struct max17055_learned_p
 		return ret;
 	}
 	ret = reg_write(dev, REG_COMMAND, 0x0000);
+	if (ret) {
+		return ret;
+	}
+
+	/*
+	 * Board-specific: THRM is unconnected (no external NTC), but ETHRM
+	 * (Config bit 4) defaults to 1 at POR regardless of TSel, so the
+	 * chip periodically drives the THRM bias switch into an open pin.
+	 * Clear it, leaving every other POR-default Config bit untouched.
+	 */
+	uint16_t config_reg;
+
+	ret = reg_read(dev, REG_CONFIG, &config_reg);
+	if (ret) {
+		return ret;
+	}
+	ret = reg_write(dev, REG_CONFIG, config_reg & ~CONFIG_ETHRM);
 	if (ret) {
 		return ret;
 	}
