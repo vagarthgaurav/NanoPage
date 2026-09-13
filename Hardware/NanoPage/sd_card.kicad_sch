@@ -1340,6 +1340,17 @@
 		)
 		(uuid "548b075e-c547-4894-b3d5-1a8218f0ce32")
 	)
+	(text "For the Next design use seperate buses for the SD card and EPD. \nSharing the bus with a power switch causes problems where the \nEPD cant be correctly operated when the SD card power is cut"
+		(exclude_from_sim no)
+		(at 109.728 190.754 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "6f17995d-82bc-4b51-a0d2-19018f9468e2")
+	)
 	(text "Micro SD Card with Load switch"
 		(exclude_from_sim no)
 		(at 151.892 21.59 0)
@@ -1351,6 +1362,18 @@
 			)
 		)
 		(uuid "add0413c-6135-476a-8cb1-c10ad1b8ec5d")
+	)
+	(text "Note"
+		(exclude_from_sim no)
+		(at 114.046 185.928 0)
+		(effects
+			(font
+				(size 2.54 2.54)
+				(thickness 0.508)
+				(bold yes)
+			)
+		)
+		(uuid "db5c3647-05d3-4772-90c2-112ade45cc98")
 	)
 	(text "Micro SD with Load switch\n"
 		(exclude_from_sim no)
