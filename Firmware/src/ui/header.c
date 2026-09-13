@@ -39,6 +39,12 @@ static bool have_last;
 static char last_date_buf[24];
 static uint8_t last_percent;
 static bool last_charging;
+/* Sized independently of sd.h's APP_SD_MAX_PATH_LEN - this only needs to
+ * hold whatever `folder` the caller (browser.c) passes, and comparing the
+ * full string (not the truncated on-screen version) is what actually
+ * tells us the folder changed.
+ */
+static char last_folder[128];
 
 int app_header_update(const char *folder)
 {
@@ -87,7 +93,7 @@ int app_header_update(const char *folder)
 	 * here means something the user would actually see changed.
 	 */
 	if (have_last && strcmp(date_buf, last_date_buf) == 0 && percent == last_percent &&
-	    charging == last_charging) {
+	    charging == last_charging && strncmp(folder, last_folder, sizeof(last_folder)) == 0) {
 		return 0;
 	}
 
@@ -95,6 +101,7 @@ int app_header_update(const char *folder)
 	memcpy(last_date_buf, date_buf, date_len + 1);
 	last_percent = percent;
 	last_charging = charging;
+	snprintf(last_folder, sizeof(last_folder), "%s", folder);
 
 	app_text_get_grid(&cols, &rows);
 

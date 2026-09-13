@@ -3,6 +3,9 @@
 #ifndef APP_SD_H_
 #define APP_SD_H_
 
+#include <stdbool.h>
+#include <stddef.h>
+
 /*
  * IMPORTANT hardware constraint - the microSD card is a genuine
  * bus-sharing hazard on this board (no bus-isolation switch, only its
@@ -96,5 +99,71 @@ void app_sd_deinit(void);
  */
 int app_sd_power_on(void);
 void app_sd_power_off(void);
+
+/*
+ * Generous shared bound for a full SD path (mount point + subdirs), used
+ * both internally (app_sd_list_dir()'s own working buffer below) and by
+ * any caller building up a "current directory" string while navigating
+ * (e.g. a future file browser) - the old Arduino-era firmware had a real
+ * path-buffer overflow bug from descending deeply-nested directories with
+ * an undersized fixed buffer (see git history, "prevent path_ buffer
+ * overflow when descending deeply-nested dirs"); sharing one generous
+ * constant instead of every caller guessing its own is cheap insurance
+ * against repeating that.
+ */
+#define APP_SD_MAX_PATH_LEN 200
+
+/*
+ * Longest filename app_sd_list_dir() below will return, INCLUDING the
+ * null terminator - longer names are truncated, not rejected. FAT/LFN on
+ * this card can return names up to MAX_FILE_NAME (zephyr/fs/fs.h,
+ * currently 255 per CONFIG_FS_FATFS_MAX_LFN in prj.conf), but nothing
+ * that displays these (text.c's character grid is well under 50 columns
+ * even at the smallest UI font) needs the full length, and a fixed,
+ * shorter cap keeps struct app_sd_dirent cheap enough to hold a whole
+ * directory's worth of entries in one static/stack array.
+ */
+#define APP_SD_MAX_NAME_LEN 48
+
+struct app_sd_dirent {
+	char name[APP_SD_MAX_NAME_LEN];
+	bool is_dir;
+};
+
+/*
+ * Lists the entries of `path` (a directory, relative to the SD
+ * filesystem's own root and starting with '/' - e.g. "/" or "/books", NOT
+ * prefixed with the internal FATFS mount point) into the caller-provided
+ * `entries` array, up to `max_entries`. Hidden/dot entries (on FAT/LFN
+ * this is really only "." and ".." themselves - fs_readdir() never
+ * returns other dot-prefixed names on FAT) are skipped, not counted.
+ * `*count` is always set to how many entries were actually written,
+ * including 0 if the directory was empty or every entry was skipped.
+ *
+ * Mechanism only, no policy: entries come back in whatever order
+ * fs_readdir() itself returns them (raw FAT directory order - not
+ * sorted, directories and files interleaved). Sorting, putting
+ * directories first, and paging past max_entries are all a browser UI's
+ * job, not this file's - same mechanism/policy split as max17055.c
+ * (raw register access) vs fuel_gauge.c (what to do with it).
+ *
+ * Requires the card to already be mounted - i.e. called while an
+ * app_sd_init() hold is still active. Returns -ENODEV immediately if
+ * not, rather than mounting or touching the power switch/CS pin itself
+ * (see the two-mechanism backfeed writeup above for why those stay
+ * confined to app_sd_init()/app_sd_deinit()/app_sd_power_on()/
+ * app_sd_power_off()). A caller doing one one-shot listing should
+ * bracket this call with its own app_sd_init()/app_sd_deinit() pair; a
+ * file browser listing many directories in a row (navigating in and out
+ * of folders) should mount once up front and call this repeatedly
+ * instead, to avoid re-paying SD_POWER_UP_DELAY_MS and a full remount
+ * per folder.
+ *
+ * Returns 0 on success (even if the listing was truncated to
+ * max_entries), negative errno if the directory itself couldn't be
+ * opened.
+ */
+int app_sd_list_dir(const char *path, struct app_sd_dirent *entries, size_t max_entries,
+		     size_t *count);
 
 #endif /* APP_SD_H_ */

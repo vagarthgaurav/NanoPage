@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 #include <ff.h>
+#include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
@@ -193,4 +194,60 @@ void app_sd_deinit(void)
 	app_sd_power_off();
 
 	app_display_unlock();
+}
+
+int app_sd_list_dir(const char *path, struct app_sd_dirent *entries, size_t max_entries,
+		     size_t *count)
+{
+	char full_path[APP_SD_MAX_PATH_LEN];
+	struct fs_dir_t dir;
+	struct fs_dirent dirent;
+	int ret;
+
+	*count = 0;
+
+	/*
+	 * Deliberately does not mount or touch sd_power_refcount/sd_cs_gpio
+	 * itself - see the doc comment in sd.h. Only app_sd_init()/
+	 * app_sd_deinit() (and display.c's per-refresh bracket) are allowed
+	 * near the power switch/CS pin, so the two confirmed backfeed
+	 * mechanisms stay fixed in exactly one place each.
+	 */
+	if (!sd_mounted) {
+		return -ENODEV;
+	}
+
+	ret = snprintf(full_path, sizeof(full_path), "%s%s", DISK_MOUNT_PT, path);
+	if (ret < 0 || (size_t)ret >= sizeof(full_path)) {
+		return -ENAMETOOLONG;
+	}
+
+	fs_dir_t_init(&dir);
+
+	ret = fs_opendir(&dir, full_path);
+	if (ret) {
+		printk("SD: opendir(%s) failed (%d)\n", full_path, ret);
+		return ret;
+	}
+
+	while (*count < max_entries) {
+		ret = fs_readdir(&dir, &dirent);
+		if (ret || dirent.name[0] == '\0') {
+			/* ret != 0: read error; empty name: end of directory. */
+			break;
+		}
+
+		if (dirent.name[0] == '.') {
+			continue; /* "." / ".." - FAT/LFN has no other dot-files */
+		}
+
+		strncpy(entries[*count].name, dirent.name, APP_SD_MAX_NAME_LEN - 1);
+		entries[*count].name[APP_SD_MAX_NAME_LEN - 1] = '\0';
+		entries[*count].is_dir = (dirent.type == FS_DIR_ENTRY_DIR);
+		(*count)++;
+	}
+
+	fs_closedir(&dir);
+
+	return 0;
 }

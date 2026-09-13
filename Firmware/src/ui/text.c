@@ -526,17 +526,51 @@ int app_text_set_cursor(uint16_t row, uint16_t col, bool visible)
 int app_text_flush(void)
 {
 	const struct cfb_font *f = font_entry(cur_font);
+	uint16_t row = 0;
 
-	for (uint16_t row = 0; row < grid_rows; row++) {
-		struct row_dirty *d = &rows_dirty[row];
+	while (row < grid_rows) {
+		uint16_t run_start, run_end, x_min, x_max;
 		uint16_t x, w, y, h, band0, nbands;
 		size_t buf_size;
 		uint8_t *tmp;
 		int ret;
 
-		if (!d->dirty) {
+		if (!rows_dirty[row].dirty) {
+			row++;
 			continue;
 		}
+
+		/*
+		 * Coalesce a run of consecutive dirty rows into ONE combined
+		 * app_display_refresh_partial() call instead of one per row.
+		 * Each SSD1680 partial refresh pays its own fixed BUSY-wait
+		 * (~530ms measured, largely independent of rectangle size -
+		 * it's the waveform settling, not the SPI clock-out, that
+		 * dominates) regardless of how small the changed region is,
+		 * so flushing N adjacent rows separately costs ~N times what
+		 * one combined taller rectangle does. This matters most for
+		 * two callers: a cursor move (browser.c) dirties exactly two
+		 * *adjacent* rows (old + new cursor position, always one row
+		 * apart within a page), and a full-page redraw (also
+		 * browser.c) dirties every visible content row at once - both
+		 * used to show up as a visibly slow, one-row-at-a-time
+		 * flicker; a run merges into a single refresh instead. The
+		 * combined rectangle's x-range is the union of every row's
+		 * own dirty x-range in the run - rows with a narrower range
+		 * than the run's widest just resend a bit of already-correct
+		 * pixel data alongside, harmless (no visual difference, only
+		 * a slightly bigger SPI transfer).
+		 */
+		run_start = row;
+		x_min = rows_dirty[row].x_min;
+		x_max = rows_dirty[row].x_max;
+		row++;
+		while (row < grid_rows && rows_dirty[row].dirty) {
+			x_min = MIN(x_min, rows_dirty[row].x_min);
+			x_max = MAX(x_max, rows_dirty[row].x_max);
+			row++;
+		}
+		run_end = row;
 
 		/*
 		 * x/width need no alignment here - in this vtiled layout each
@@ -545,13 +579,14 @@ int app_text_flush(void)
 		 * ssd16xx_set_window()'s bounds check (no x/width % 8
 		 * requirement in this orientation) and its write path's
 		 * `height * width / 8` byte-count math, which is exact as
-		 * long as height is a multiple of 8 - guaranteed since
-		 * h = f->height below (16/24/32 for the built-in fonts).
+		 * long as height is a multiple of 8 - guaranteed since h is a
+		 * whole number of row heights (16/24/32 for the built-in
+		 * fonts), each already a multiple of 8.
 		 */
-		x = d->x_min;
-		w = d->x_max - d->x_min;
-		y = row * f->height;
-		h = f->height;
+		x = x_min;
+		w = x_max - x_min;
+		y = run_start * f->height;
+		h = (uint16_t)(run_end - run_start) * f->height;
 
 		band0 = y / 8;
 		nbands = h / 8;
@@ -578,7 +613,9 @@ int app_text_flush(void)
 			return ret;
 		}
 
-		d->dirty = false;
+		for (uint16_t r = run_start; r < run_end; r++) {
+			rows_dirty[r].dirty = false;
+		}
 	}
 
 	return 0;

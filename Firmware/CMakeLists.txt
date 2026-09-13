@@ -17,6 +17,7 @@ target_sources(app PRIVATE
 	src/ui/font_siji.c
 	src/ui/header.c
 	src/ui/footer.c
+	src/ui/browser.c
 	src/power/max17055.c
 	src/power/fuel_gauge.c
 	src/power/charger.c

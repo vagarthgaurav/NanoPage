@@ -35,10 +35,9 @@
  * this from either is safe without extra locking - see main.c.
  * Redraws when: the formatted "dd/mm/yy HH:mm" string changes (i.e. the
  * minute rolled over), the displayed whole-percent battery value changes
- * by at least 1, or app_charger_is_charging() flips. `folder` is not
- * currently part of that comparison - fine while it's a compile-time
- * placeholder, but whoever makes it dynamic (a real file browser) needs
- * to fold it into the change check too.
+ * by at least 1, app_charger_is_charging() flips, or `folder` itself
+ * differs from the last-drawn one (browser.c calls this on every folder
+ * navigation, not just the periodic RTC tick - see app_browser_init()).
  * Returns 1 if it redrew, 0 if nothing changed (row left untouched),
  * negative errno if the RTC or fuel gauge read failed (row left
  * untouched either way - unlike the old app_header_draw(), a fuel-gauge

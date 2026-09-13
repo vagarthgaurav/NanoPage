@@ -3,6 +3,8 @@
 #include <zephyr/drivers/rtc.h>
 #include <zephyr/kernel.h>
 
+#include "browser.h"
+#include "buttons.h"
 #include "charger.h"
 #include "display.h"
 #include "footer.h"
@@ -10,7 +12,6 @@
 #include "header.h"
 #include "power.h"
 #include "rtc.h"
-#include "sd.h"
 #include "text.h"
 
 /*
@@ -31,10 +32,11 @@
  */
 #define STATUS_CURRENT_SAMPLE_LEAD_SEC 5
 
-/* Placeholder until a real file browser/page-location tracker exists -
- * see app_header_update()'s "folder" argument in header.h.
+/* app_header_update()'s "folder" argument (header.h) when there's no real
+ * browser path to show - the browser failed to mount the SD card at boot,
+ * or hasn't been initialized yet.
  */
-#define HEADER_FOLDER_PLACEHOLDER "/books"
+#define HEADER_FOLDER_FALLBACK "(no SD card)"
 
 /*
  * The footer's periodic sample-then-draw cycle, as a k_work_delayable
@@ -45,17 +47,27 @@
 static struct k_work_delayable footer_sample_work;
 static struct k_work_delayable footer_draw_work;
 
+/* Set once app_browser_init() succeeds in main() - see on_header_event()
+ * and the HEADER_FOLDER_FALLBACK comment above.
+ */
+static bool browser_ready;
+
 /*
  * Registered with both app_rtc_set_alarm() (fires once a minute) and
  * app_charger_set_change_callback() (fires on every STAT transition) -
  * see header.h for exactly what app_header_update() checks before
- * deciding whether there's actually anything new to draw.
+ * deciding whether there's actually anything new to draw. browser.c also
+ * calls app_header_update() directly on every folder navigation, so the
+ * folder text doesn't lag behind until the next one of these ticks.
  */
 static void on_header_event(void)
 {
 	app_fuel_gauge_notify_charger_state(app_charger_is_charging());
 
-	if (app_header_update(HEADER_FOLDER_PLACEHOLDER) > 0) {
+	const char *folder = browser_ready ? app_browser_get_current_path()
+					    : HEADER_FOLDER_FALLBACK;
+
+	if (app_header_update(folder) > 0) {
 		app_text_flush();
 	}
 }
@@ -87,7 +99,7 @@ static void footer_sample_handler(struct k_work *work)
 
 int main(void)
 {
-	printk("NanoPage: RTC + buttons + display + fuel gauge bring-up.\n");
+	printk("NanoPage: RTC + buttons + display + fuel gauge + file browser bring-up.\n");
 
 	if (app_rtc_init()) {
 		return 0;
@@ -97,6 +109,7 @@ int main(void)
 	app_fuel_gauge_init();
 	app_charger_init();
 	app_power_init();
+	app_buttons_init();
 
 	if (app_text_init(APP_TEXT_FONT_TAMZEN) == 0) {
 		app_footer_init();
@@ -104,22 +117,27 @@ int main(void)
 		app_power_show_wake_message();
 
 		app_footer_sample_current();
-		app_header_update(HEADER_FOLDER_PLACEHOLDER);
 		app_footer_draw();
-		app_text_full_refresh();
 
 		/*
-		 * Mount the SD card once at boot - app_sd_init()/
-		 * app_sd_deinit() pair unconditionally regardless of mount
-		 * success, since a failed mount can still leave the card's
-		 * power hold in place (see sd.h) and needs releasing either
-		 * way. Every later display refresh brackets its own SD power
-		 * independently (app_display_lock()/app_display_unlock(),
-		 * see sd.h), so nothing here needs to keep the card mounted
-		 * or powered beyond this one-shot check.
+		 * Mounts the SD card and leaves it mounted for as long as the
+		 * browser stays active (see sd.h/browser.h - unlike the old
+		 * one-shot boot-time mount check this replaces, a live file
+		 * browser needs to keep listing directories on demand, not
+		 * just prove the card works once). Draws the initial listing
+		 * plus the header (with the real starting path) and does the
+		 * one full refresh that covers the footer drawn just above
+		 * too - avoids a second, redundant full-panel flash right
+		 * after it. On failure (no card inserted, bad mount), falls
+		 * back to a plain header + full refresh so the footer at
+		 * least isn't left unflushed.
 		 */
-		app_sd_init();
-		app_sd_deinit();
+		browser_ready = (app_browser_init("/") == 0);
+		if (!browser_ready) {
+			printk("main: browser init failed - no SD card?\n");
+			app_header_update(HEADER_FOLDER_FALLBACK);
+			app_text_full_refresh();
+		}
 
 		/*
 		 * From here on, nothing touches text.c/display.c from the main
