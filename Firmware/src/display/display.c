@@ -89,19 +89,9 @@ static int app_display_write(uint16_t x, uint16_t y, uint16_t width, uint16_t he
 	return display_write(display_dev, x, y, &desc, buf);
 }
 
-/* Every refresh call below blocks on the BUSY pin until the panel is
- * physically done, so the wall-clock delta here is the real refresh time -
- * useful for weighing refresh strategy against battery life.
- */
-static void log_elapsed(const char *label, int64_t start_ms)
-{
-	printk("display: %s refresh took %lld ms\n", label, k_uptime_get() - start_ms);
-}
-
 int app_display_refresh_full(const uint8_t *buf, size_t buf_size)
 {
 	uint16_t width, height;
-	int64_t start_ms = k_uptime_get();
 	int ret;
 
 	app_display_get_size(&width, &height);
@@ -120,16 +110,12 @@ int app_display_refresh_full(const uint8_t *buf, size_t buf_size)
 		return ret;
 	}
 
-	ret = display_blanking_off(display_dev);
-	log_elapsed("full", start_ms);
-
-	return ret;
+	return display_blanking_off(display_dev);
 }
 
 int app_display_refresh_fast(const uint8_t *buf, size_t buf_size)
 {
 	uint16_t width, height;
-	int64_t start_ms = k_uptime_get();
 	int ret;
 
 	app_display_get_size(&width, &height);
@@ -143,10 +129,7 @@ int app_display_refresh_fast(const uint8_t *buf, size_t buf_size)
 	ret = app_display_write(0, 0, width, height, buf, buf_size);
 	if (ret) {
 		printk("display_write (fast) failed: %d\n", ret);
-		return ret;
 	}
-
-	log_elapsed("fast", start_ms);
 
 	return ret;
 }
@@ -154,15 +137,11 @@ int app_display_refresh_fast(const uint8_t *buf, size_t buf_size)
 int app_display_refresh_partial(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
 				 const uint8_t *buf, size_t buf_size)
 {
-	int64_t start_ms = k_uptime_get();
 	int ret = app_display_write(x, y, width, height, buf, buf_size);
 
 	if (ret) {
 		printk("display_write (partial) failed: %d\n", ret);
-		return ret;
 	}
-
-	log_elapsed("partial", start_ms);
 
 	return ret;
 }
