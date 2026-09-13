@@ -12,16 +12,20 @@ target_sources(app PRIVATE
 	src/drivers/rtc.c
 	src/drivers/buttons.c
 	src/display/display.c
-	src/display/text.c
-	src/display/font_tamzen.c
-	src/display/font_siji.c
+	src/ui/text.c
+	src/ui/font_tamzen.c
+	src/ui/font_siji.c
+	src/ui/header.c
+	src/ui/footer.c
 	src/power/max17055.c
 	src/power/fuel_gauge.c
+	src/power/charger.c
 	src/power/power.c
 )
 
 target_include_directories(app PRIVATE
 	src/display
+	src/ui
 	src/power
 	src/drivers
 )

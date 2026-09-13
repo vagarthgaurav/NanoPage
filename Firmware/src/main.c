@@ -1,91 +1,85 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#include <stdio.h>
+#include <zephyr/drivers/rtc.h>
 #include <zephyr/kernel.h>
 
+#include "charger.h"
 #include "display.h"
+#include "footer.h"
 #include "fuel_gauge.h"
-#include "max17055.h"
+#include "header.h"
 #include "power.h"
 #include "rtc.h"
 #include "text.h"
 
 /*
- * Status-bar refresh cadence: partial refresh is cheap (text.c only
- * pushes the one changed row), but even a sub-second SSD1680 "fast"
- * waveform update isn't free against the battery-life goal for a value
- * (SOC/voltage) that barely moves second to second. 30s is a placeholder
- * - revisit once there's real battery-life data to tune against.
+ * Footer refresh cadence: partial refresh is cheap (text.c only pushes
+ * the one changed row), but even a sub-second SSD1680 "fast" waveform
+ * update isn't free against the battery-life goal for a value (SOC/
+ * voltage) that barely moves second to second. 30s is a placeholder -
+ * revisit once there's real battery-life data to tune against. Unlike
+ * the header (event-driven - see on_header_event() below), nothing tells
+ * the footer's values changed, so it stays on a plain timer.
  */
 #define STATUS_REFRESH_INTERVAL_SEC 30
 
 /*
  * How long before the refresh to sample the instantaneous Current
- * register. Unlike AvgCurrent (chip-filtered, immune to this), a raw
- * Current sample taken right at refresh time would land on top of the
- * SSD1680 partial-refresh SPI burst that follows it a moment later,
- * reading elevated/noisy current rather than true idle draw. Sampling
- * 5s ahead of the refresh, with nothing else going on in between, gives
- * a clean instantaneous idle sample instead.
+ * register - see app_footer_sample_current() in footer.h for why this
+ * needs to happen ahead of the draw rather than at draw time.
  */
 #define STATUS_CURRENT_SAMPLE_LEAD_SEC 5
 
-static uint16_t status_row;
-static int32_t last_instant_current_ua;
-
-/* Samples the raw Current register only, STATUS_CURRENT_SAMPLE_LEAD
- * ahead of the next draw_status(), while the board is otherwise idle.
- * Leaves last_instant_current_ua unchanged on I2C failure.
+/* Placeholder until a real file browser/page-location tracker exists -
+ * see app_header_update()'s "folder" argument in header.h.
  */
-static void sample_instant_current(void)
-{
-	struct max17055_data_snapshot snap;
+#define HEADER_FOLDER_PLACEHOLDER "/books"
 
-	if (app_fuel_gauge_read(&snap) == 0) {
-		last_instant_current_ua = snap.current_ua;
+/*
+ * The footer's periodic sample-then-draw cycle, as a k_work_delayable
+ * chain on the system workqueue instead of a main-thread sleep loop -
+ * see the comment in main() for why everything that touches text.c's
+ * framebuffer needs to live on one thread.
+ */
+static struct k_work_delayable footer_sample_work;
+static struct k_work_delayable footer_draw_work;
+
+/*
+ * Registered with both app_rtc_set_alarm() (fires once a minute) and
+ * app_charger_set_change_callback() (fires on every STAT transition) -
+ * see header.h for exactly what app_header_update() checks before
+ * deciding whether there's actually anything new to draw.
+ */
+static void on_header_event(void)
+{
+	if (app_header_update(HEADER_FOLDER_PLACEHOLDER) > 0) {
+		app_text_flush();
 	}
 }
 
-/* Formats a signed microamp current as "-12.345mA" (3 decimal places -
- * the ADC's own LSB is 156.25uA for this board's 10mOhm sense resistor,
- * see reg_to_current_ua() in max17055.c, so whole-mA truncation would
- * throw away the only resolution the chip actually has to offer).
- */
-static void format_current_ma(char *out, size_t len, int32_t current_ua)
+static void footer_draw_handler(struct k_work *work)
 {
-	bool neg = current_ua < 0;
+	ARG_UNUSED(work);
 
-	if (neg) {
-		current_ua = -current_ua;
+	app_footer_draw();
+	app_text_flush();
+
+	if (app_fuel_gauge_should_save_learned_params()) {
+		app_fuel_gauge_save_learned_params();
 	}
 
-	snprintf(out, len, "%s%d.%03dmA", neg ? "-" : "", (int)(current_ua / 1000),
-		 (int)(current_ua % 1000));
+	app_power_check_idle();
+
+	k_work_schedule(&footer_sample_work,
+			K_SECONDS(STATUS_REFRESH_INTERVAL_SEC - STATUS_CURRENT_SAMPLE_LEAD_SEC));
 }
 
-/* Draws into text.c's framebuffer only - caller pushes it (app_text_flush()
- * for a cheap partial update, or app_text_full_refresh() for the initial
- * ghost-free draw).
- */
-static void draw_status(void)
+static void footer_sample_handler(struct k_work *work)
 {
-	struct max17055_data_snapshot snap;
-	char buf[72];
-	char inst_buf[16];
-	char avg_buf[16];
+	ARG_UNUSED(work);
 
-	if (app_fuel_gauge_read(&snap)) {
-		return;
-	}
-
-	format_current_ma(inst_buf, sizeof(inst_buf), last_instant_current_ua);
-	format_current_ma(avg_buf, sizeof(avg_buf), snap.avg_current_ua);
-
-	snprintf(buf, sizeof(buf), "%u.%u%%  %d.%03dV  I%s A%s", snap.soc_x10 / 10,
-		 snap.soc_x10 % 10, (int)(snap.voltage_uv / 1000000),
-		 (int)((snap.voltage_uv / 1000) % 1000), inst_buf, avg_buf);
-
-	app_text_draw_row(status_row, buf);
+	app_footer_sample_current();
+	k_work_schedule(&footer_draw_work, K_SECONDS(STATUS_CURRENT_SAMPLE_LEAD_SEC));
 }
 
 int main(void)
@@ -98,36 +92,49 @@ int main(void)
 
 	app_display_init();
 	app_fuel_gauge_init();
+	app_charger_init();
 	app_power_init();
 
 	if (app_text_init(APP_TEXT_FONT_TAMZEN) == 0) {
-		uint16_t cols;
-
-		app_text_get_grid(&cols, &status_row);
-		status_row -= 1;
+		app_footer_init();
 
 		app_power_show_wake_message();
 
-		sample_instant_current();
-		draw_status();
+		app_footer_sample_current();
+		app_header_update(HEADER_FOLDER_PLACEHOLDER);
+		app_footer_draw();
 		app_text_full_refresh();
-	}
 
-	while (1) {
-		k_sleep(K_SECONDS(STATUS_REFRESH_INTERVAL_SEC - STATUS_CURRENT_SAMPLE_LEAD_SEC));
+		/*
+		 * From here on, nothing touches text.c/display.c from the main
+		 * thread again - it's all event-driven, and every path is
+		 * funneled onto the single system workqueue thread so nothing
+		 * races the shared framebuffer/dirty-row state: the RTC alarm
+		 * callback (rtc.c's alarm_trampoline) and the charger STAT
+		 * callback (charger.c's stat_change_work_handler) both already
+		 * run there, and the footer's periodic cycle below is a
+		 * k_work_delayable chain instead of a main-thread sleep loop
+		 * for the same reason. main() falls through and returns after
+		 * this - Zephyr doesn't need it to keep running.
+		 */
+		k_work_init_delayable(&footer_sample_work, footer_sample_handler);
+		k_work_init_delayable(&footer_draw_work, footer_draw_handler);
+		k_work_schedule(&footer_sample_work,
+				K_SECONDS(STATUS_REFRESH_INTERVAL_SEC -
+					  STATUS_CURRENT_SAMPLE_LEAD_SEC));
 
-		sample_instant_current();
+		/*
+		 * mask = SECOND only, with tm_sec = 0, leaves minute/hour/day
+		 * unconstrained - the PCF85063 driver disables those fields
+		 * entirely (see pcf85063a_alarm_set_time()) rather than
+		 * matching a fixed value, so this alarm matches - and
+		 * therefore fires - every time seconds rolls to 0, forever
+		 * recurring, not a one-shot needing to be re-armed.
+		 */
+		struct rtc_time minute_tick = {.tm_sec = 0};
 
-		k_sleep(K_SECONDS(STATUS_CURRENT_SAMPLE_LEAD_SEC));
-
-		draw_status();
-		app_text_flush();
-
-		if (app_fuel_gauge_should_save_learned_params()) {
-			app_fuel_gauge_save_learned_params();
-		}
-
-		app_power_check_idle();
+		app_rtc_set_alarm(&minute_tick, RTC_ALARM_TIME_MASK_SECOND, on_header_event);
+		app_charger_set_change_callback(on_header_event);
 	}
 
 	return 0;

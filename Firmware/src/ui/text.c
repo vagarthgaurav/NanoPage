@@ -226,6 +226,41 @@ static void draw_glyph(const struct cfb_font *f, unsigned char c, uint16_t px, u
 	}
 }
 
+/*
+ * Same bit-reading convention as draw_glyph() above, but only blits the
+ * glyph's first `native_height` rows (the real ink, per the font's own
+ * documented padding - e.g. FONT_TAMZEN_NATIVE_HEIGHT), placed at the
+ * *bottom* of the `cell_height`-tall cell instead of the top - and
+ * explicitly clears the now-blank rows above it, since a redraw must
+ * still fully replace whatever was in the cell before (same contract as
+ * draw_glyph()).
+ */
+static void draw_glyph_bottom(const struct cfb_font *f, unsigned char c, uint16_t px,
+			       uint16_t py_top, uint16_t cell_height, uint16_t native_height)
+{
+	const uint8_t *glyph;
+	uint16_t pad = cell_height - native_height;
+
+	if (c < f->first_char || c > f->last_char) {
+		c = ' ';
+	}
+
+	glyph = (const uint8_t *)f->data + (c - f->first_char) * (f->width * f->height / 8U);
+
+	for (uint16_t gx = 0; gx < f->width; gx++) {
+		for (uint16_t y = 0; y < pad; y++) {
+			set_pixel(px + gx, py_top + y, false);
+		}
+
+		for (uint16_t gy = 0; gy < native_height; gy++) {
+			uint8_t byte = glyph[gx * (f->height / 8U) + gy / 8U];
+			bool ink = (byte >> (gy % 8U)) & 1U;
+
+			set_pixel(px + gx, py_top + pad + gy, ink);
+		}
+	}
+}
+
 static void invert_cell(uint16_t row, uint16_t col)
 {
 	const struct cfb_font *f = font_entry(cur_font);
@@ -381,6 +416,35 @@ int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon)
 	return 0;
 }
 
+uint16_t app_text_col_to_px(uint16_t col)
+{
+	return col * font_entry(cur_font)->width;
+}
+
+uint16_t app_text_row_height(void)
+{
+	return font_entry(cur_font)->height;
+}
+
+int app_text_draw_hline(uint16_t row, uint16_t y_in_row, bool black)
+{
+	uint16_t py;
+
+	if (!fb_buf || row >= grid_rows || y_in_row >= font_entry(cur_font)->height) {
+		return -EINVAL;
+	}
+
+	py = row * font_entry(cur_font)->height + y_in_row;
+
+	for (uint16_t x = 0; x < fb_width; x++) {
+		set_pixel(x, py, black);
+	}
+
+	mark_dirty(row, 0, fb_width);
+
+	return 0;
+}
+
 int app_text_draw_row(uint16_t row, const char *str)
 {
 	size_t len;
@@ -393,6 +457,42 @@ int app_text_draw_row(uint16_t row, const char *str)
 
 	for (uint16_t col = 0; col < grid_cols; col++) {
 		app_text_draw_cell(row, col, (col < len) ? str[col] : ' ');
+	}
+
+	return 0;
+}
+
+int app_text_draw_row_bottom_aligned(uint16_t row, const char *str, uint16_t native_height)
+{
+	const struct cfb_font *f;
+	size_t len;
+	uint16_t py;
+
+	if (!fb_buf || row >= grid_rows) {
+		return -EINVAL;
+	}
+
+	f = font_entry(cur_font);
+	if (native_height > f->height) {
+		return -EINVAL;
+	}
+
+	len = strlen(str);
+	py = row * f->height;
+
+	for (uint16_t col = 0; col < grid_cols; col++) {
+		unsigned char c = (col < len) ? (unsigned char)str[col] : ' ';
+
+		draw_glyph_bottom(f, c, col * f->width, py, f->height, native_height);
+	}
+
+	mark_dirty(row, 0, fb_width);
+
+	/* Same reasoning as app_text_draw_cell(): redrawing over the cursor
+	 * cell leaves a stale inverted glyph.
+	 */
+	if (cursor.visible && cursor.row == row) {
+		cursor.visible = false;
 	}
 
 	return 0;

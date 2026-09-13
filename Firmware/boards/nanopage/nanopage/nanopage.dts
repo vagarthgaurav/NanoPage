@@ -118,6 +118,17 @@
 		sw-prev = &button_prev;
 		rtc0 = &rtc_ext;
 	};
+
+	/*
+	 * BQ25170 STAT output, P0.03 - open-drain, pulled up externally
+	 * (R8, 10k to +3V3 per the schematic), so no internal pull is
+	 * configured here. No dedicated driver/binding for this - a plain
+	 * zephyr,user property is the standard way to hand app code a raw
+	 * GPIO it configures/reads itself (see charger.c).
+	 */
+	zephyr,user {
+		charger-status-gpios = <&gpio0 3 GPIO_ACTIVE_LOW>;
+	};
 };
 
 /* Externally regulated 3.3V feeds both VDD and VDDH - REG0 (VDDH->VDD
@@ -239,11 +250,12 @@
  * Pins not yet wired to a devicetree node - each belongs to a driver
  * that hasn't been added to the board file yet:
  *
- *   P0.03  charger status        - BQ25170 status output
  *   P0.12  SD card detect        - card-detect switch
  *   P0.17  USB detect            - VBUS sense, separate from the native USBD peripheral
  *   P0.13  fuel gauge alert      - MAX17055 alert-gpios
  *   P1.00  charger power-good    - BQ25170 PG output
+ *
+ * P0.03 (charger status) is wired above (zephyr,user) - see charger.c.
  *
  * P0.15, P0.20, P0.22, P0.04, P0.07, P1.02, P1.04, P1.06, P1.10 are NC
  * per the schematic and intentionally left out.

@@ -17,4 +17,12 @@
  */
 extern const struct cfb_font font_tamzen_6x16;
 
+/* Real (unpadded) glyph height - the 4 rows above this within the 16px
+ * cell are blank filler, not visible ink. See
+ * app_text_draw_row_bottom_aligned() in text.h for a caller that draws
+ * flush against the bottom of the cell instead of the (default) top,
+ * using this to know how many of the 16 rows are real glyph content.
+ */
+#define FONT_TAMZEN_NATIVE_HEIGHT 12
+
 #endif /* APP_FONT_TAMZEN_H_ */
