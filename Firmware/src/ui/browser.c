@@ -62,6 +62,18 @@ static uint8_t partial_count;
 
 static void on_button(enum app_button button);
 
+/* .bmk files are per-book reader-progress sidecars (reader.c) - purely
+ * internal bookkeeping, never something the user opens directly, so they're
+ * filtered out of the listing entirely rather than shown alongside the
+ * .npb book they belong to.
+ */
+static bool has_bmk_extension(const char *name)
+{
+	size_t len = strlen(name);
+
+	return len > 4 && strcasecmp(name + len - 4, ".bmk") == 0;
+}
+
 /*
  * load_dir()'s scratch buffer for app_sd_list_dir() - deliberately static/
  * BSS rather than a local variable: at APP_BROWSER_MAX_ENTRIES entries
@@ -116,6 +128,10 @@ static int load_dir(const char *path)
 	}
 
 	for (size_t i = 0; i < raw_count; i++) {
+		if (!raw_listing[i].is_dir && has_bmk_extension(raw_listing[i].name)) {
+			continue;
+		}
+
 		strncpy(entries[entry_count].name, raw_listing[i].name,
 			sizeof(entries[entry_count].name) - 1);
 		entries[entry_count].name[sizeof(entries[entry_count].name) - 1] = '\0';
