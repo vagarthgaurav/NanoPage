@@ -21,6 +21,7 @@ target_sources(app PRIVATE
 	src/power/fuel_gauge.c
 	src/power/charger.c
 	src/power/power.c
+	src/storage/sd.c
 )
 
 target_include_directories(app PRIVATE
@@ -28,4 +29,5 @@ target_include_directories(app PRIVATE
 	src/ui
 	src/power
 	src/drivers
+	src/storage
 )

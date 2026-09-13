@@ -219,6 +219,35 @@
 	pinctrl-0 = <&spi3_default>;
 	pinctrl-1 = <&spi3_sleep>;
 	pinctrl-names = "default", "sleep";
+
+	/*
+	 * microSD card, SD-over-SPI (zephyr,sdhc-spi-slot -> the SD
+	 * subsystem -> zephyr,sdmmc-disk for the disk_access/fs_mount
+	 * API), reg = <1> selects cs-gpios[1] above (P1.09). The card's
+	 * own load switch (regulator_sdhc, P1.11) is a separate
+	 * regulator-fixed node, not this binding's pwr-gpios - sd.c
+	 * enables/times it explicitly rather than letting this driver
+	 * toggle it around every init, per the app-level sequencing this
+	 * board's known power/display interaction needs (see sd.c).
+	 * 4MHz matches the display's own already-verified-stable
+	 * spi-max-frequency on this same bus/traces - conservative for a
+	 * first bring-up, can be raised once read back verified on
+	 * hardware (SD-over-SPI supports up to 25MHz standard speed; the
+	 * driver itself negotiates up from 400kHz during card init
+	 * regardless of this ceiling).
+	 */
+	sdhc0: sdhc@1 {
+		compatible = "zephyr,sdhc-spi-slot";
+		reg = <1>;
+		status = "okay";
+		spi-max-frequency = <4000000>;
+
+		mmc {
+			compatible = "zephyr,sdmmc-disk";
+			disk-name = "SD";
+			status = "okay";
+		};
+	};
 };
 
 &flash0 {

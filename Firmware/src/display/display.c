@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
@@ -9,6 +8,7 @@
 #include <zephyr/sys/util.h>
 
 #include "display.h"
+#include "sd.h"
 
 static const struct device *const display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 
@@ -42,6 +42,41 @@ static const struct mipi_dbi_config epd_dbi_cfg = {
  */
 #define SSD1680_CMD_DEEP_SLEEP_MODE 0x10U
 #define SSD1680_DEEP_SLEEP_MODE_2   0x03U
+
+/* See the comment on app_display_lock()/app_display_unlock() in display.h. */
+static K_MUTEX_DEFINE(display_bus_lock);
+
+void app_display_lock(void)
+{
+	k_mutex_lock(&display_bus_lock, K_FOREVER);
+
+	/*
+	 * Power the microSD card for the duration of whatever bus activity
+	 * the caller is about to do, per the hardware constraint documented
+	 * in sd.h - best-effort: a failure here (e.g. the regulator device
+	 * genuinely not ready) doesn't block the refresh itself, just logs
+	 * from within app_sd_power_on().
+	 *
+	 * This is NOT redundant with app_sd_power_off()'s CS-low fix (see
+	 * sd.c) - that fix only stops the *static* backfeed present while
+	 * everything on spi3 sits idle. During an actual refresh, SCK/MOSI
+	 * are being actively driven regardless of CS, and those shared
+	 * lines forward-bias the unpowered card's own ESD diodes just the
+	 * same - confirmed 2026-09-13 by removing this bracket and finding
+	 * refreshes broke again even with the CS fix and a boot-time CS
+	 * hook both in place. With no bus-isolation switch on this board,
+	 * actually powering the card for the refresh's duration is the only
+	 * fix available in firmware.
+	 */
+	(void)app_sd_power_on();
+}
+
+void app_display_unlock(void)
+{
+	app_sd_power_off();
+
+	k_mutex_unlock(&display_bus_lock);
+}
 
 int app_display_init(void)
 {
@@ -94,6 +129,8 @@ int app_display_refresh_full(const uint8_t *buf, size_t buf_size)
 	uint16_t width, height;
 	int ret;
 
+	app_display_lock();
+
 	app_display_get_size(&width, &height);
 
 	/*
@@ -107,16 +144,23 @@ int app_display_refresh_full(const uint8_t *buf, size_t buf_size)
 	ret = app_display_write(0, 0, width, height, buf, buf_size);
 	if (ret) {
 		printk("display_write (full) failed: %d\n", ret);
+		app_display_unlock();
 		return ret;
 	}
 
-	return display_blanking_off(display_dev);
+	ret = display_blanking_off(display_dev);
+
+	app_display_unlock();
+
+	return ret;
 }
 
 int app_display_refresh_fast(const uint8_t *buf, size_t buf_size)
 {
 	uint16_t width, height;
 	int ret;
+
+	app_display_lock();
 
 	app_display_get_size(&width, &height);
 
@@ -131,51 +175,23 @@ int app_display_refresh_fast(const uint8_t *buf, size_t buf_size)
 		printk("display_write (fast) failed: %d\n", ret);
 	}
 
+	app_display_unlock();
+
 	return ret;
 }
 
 int app_display_refresh_partial(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
 				 const uint8_t *buf, size_t buf_size)
 {
+	app_display_lock();
+
 	int ret = app_display_write(x, y, width, height, buf, buf_size);
 
 	if (ret) {
 		printk("display_write (partial) failed: %d\n", ret);
 	}
 
-	return ret;
-}
-
-int app_display_clear(bool black)
-{
-	uint16_t width, height;
-
-	app_display_get_size(&width, &height);
-
-	/*
-	 * The ssd16xx driver writes this buffer straight to the SSD1680's
-	 * WRITE_RAM command with no inversion, so despite Zephyr's
-	 * PIXEL_FORMAT_MONO10 doc comment (1=black), what actually reaches
-	 * the panel is the datasheet's native RAM convention: bit=1 ->
-	 * white, bit=0 -> black (SSD1680 datasheet, "Write RAM (Black
-	 * White)" 0x24h command description).
-	 */
-	/* See the buffer-format comment in display.h: vtiled, width bytes
-	 * per 8-row band. height is guaranteed a multiple of 8 (checked by
-	 * ssd16xx_get_capabilities()), so this is exact, no rounding.
-	 */
-	size_t buf_size = (size_t)width * (height / 8);
-	uint8_t *buf = k_malloc(buf_size);
-
-	if (!buf) {
-		return -ENOMEM;
-	}
-
-	memset(buf, black ? 0x00 : 0xFF, buf_size);
-
-	int ret = app_display_refresh_full(buf, buf_size);
-
-	k_free(buf);
+	app_display_unlock();
 
 	return ret;
 }
@@ -184,6 +200,8 @@ int app_display_deep_sleep(void)
 {
 	uint8_t data = SSD1680_DEEP_SLEEP_MODE_2;
 	int err;
+
+	app_display_lock();
 
 	/* Mirrors the driver's own ssd16xx_busy_wait() convention: don't
 	 * issue a new command while the panel is still finishing the
@@ -199,6 +217,8 @@ int app_display_deep_sleep(void)
 	err = mipi_dbi_command_write(epd_mipi_dev, &epd_dbi_cfg,
 				      SSD1680_CMD_DEEP_SLEEP_MODE, &data, 1);
 	mipi_dbi_release(epd_mipi_dev, &epd_dbi_cfg);
+
+	app_display_unlock();
 
 	return err;
 }

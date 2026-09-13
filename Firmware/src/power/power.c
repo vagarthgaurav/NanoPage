@@ -11,6 +11,7 @@
 #include <hal/nrf_power.h>
 
 #include "display.h"
+#include "sd.h"
 #include "text.h"
 
 /*
@@ -127,6 +128,17 @@ static void enter_system_off(void)
 	 * that doesn't lead to a full reboot.
 	 */
 	app_display_deep_sleep();
+
+	/*
+	 * Cut the microSD card's power here too, alongside the display -
+	 * confirmed on hardware that leaving the card powered *off* while
+	 * still inserted corrupts the shared spi3 bus for the display (see
+	 * sd.h), so it can only be safely powered down once nothing is
+	 * going to touch that bus again before the next reboot - exactly
+	 * the case here, moments before sys_poweroff(). No-op if the card
+	 * was never successfully powered on in the first place.
+	 */
+	app_sd_deinit();
 
 	for (size_t i = 0; i < ARRAY_SIZE(wake_buttons); i++) {
 		gpio_pin_configure_dt(&wake_buttons[i], GPIO_INPUT);

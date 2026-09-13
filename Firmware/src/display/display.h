@@ -3,7 +3,6 @@
 #ifndef APP_DISPLAY_H_
 #define APP_DISPLAY_H_
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <zephyr/drivers/display.h>
@@ -12,6 +11,24 @@
  * Returns 0 on success, negative errno on failure.
  */
 int app_display_init(void);
+
+/*
+ * Serializes access to spi3, which this panel shares with the microSD
+ * card (separate CS lines, same MOSI/MISO/SCK) - see sd.h for the full
+ * writeup of why this sharing is unsafe without it (two independent
+ * backfeed mechanisms, both root-caused). Every refresh function below
+ * takes this lock for its whole duration (including the BUSY wait) and
+ * also brackets it with the card's own power (see the comment in
+ * display.c), and sd.c takes the same lock around every SD card
+ * operation, so display and SD activity are never live on the bus at
+ * the same time in either direction. Safe to call from any thread;
+ * Zephyr's k_mutex is recursive for the owning thread, so display.c's
+ * own functions calling each other internally (e.g.
+ * app_display_refresh_full() from inside another refresh helper)
+ * can't deadlock on it.
+ */
+void app_display_lock(void);
+void app_display_unlock(void);
 
 /* Panel dimensions in pixels, for sizing the buffers passed to the
  * refresh functions below.
@@ -98,13 +115,6 @@ int app_display_refresh_fast(const uint8_t *buf, size_t buf_size);
  */
 int app_display_refresh_partial(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
 				 const uint8_t *buf, size_t buf_size);
-
-/* Fill the whole screen solid black (or white if false) and push it with
- * a full refresh (see app_display_refresh_full()). Convenience wrapper
- * used for the bring-up test in main.c.
- * Returns 0 on success, negative errno on failure.
- */
-int app_display_clear(bool black);
 
 /*
  * Puts the SSD1680 into its lowest-power Deep Sleep state (~0.7uA typ,

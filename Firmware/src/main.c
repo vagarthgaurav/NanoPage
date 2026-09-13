@@ -10,6 +10,7 @@
 #include "header.h"
 #include "power.h"
 #include "rtc.h"
+#include "sd.h"
 #include "text.h"
 
 /*
@@ -106,6 +107,19 @@ int main(void)
 		app_header_update(HEADER_FOLDER_PLACEHOLDER);
 		app_footer_draw();
 		app_text_full_refresh();
+
+		/*
+		 * Mount the SD card once at boot - app_sd_init()/
+		 * app_sd_deinit() pair unconditionally regardless of mount
+		 * success, since a failed mount can still leave the card's
+		 * power hold in place (see sd.h) and needs releasing either
+		 * way. Every later display refresh brackets its own SD power
+		 * independently (app_display_lock()/app_display_unlock(),
+		 * see sd.h), so nothing here needs to keep the card mounted
+		 * or powered beyond this one-shot check.
+		 */
+		app_sd_init();
+		app_sd_deinit();
 
 		/*
 		 * From here on, nothing touches text.c/display.c from the main
