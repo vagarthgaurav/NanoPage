@@ -97,8 +97,6 @@ int main(void)
 	if (app_text_init(APP_TEXT_FONT_TAMZEN) == 0) {
 		app_footer_init();
 
-		app_power_show_wake_message();
-
 		app_footer_sample_current();
 		app_footer_draw();
 

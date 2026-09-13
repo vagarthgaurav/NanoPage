@@ -26,12 +26,4 @@ void app_power_mark_activity(void);
  */
 void app_power_check_idle(void);
 
-/*
- * If the boot cause recorded by app_power_init() was a wake from System
- * OFF, briefly shows a "Waking up" message on the panel before the caller
- * draws its real content. No-op on a normal power-on or debugger reset.
- * Call after app_text_init() has succeeded.
- */
-void app_power_show_wake_message(void);
-
 #endif

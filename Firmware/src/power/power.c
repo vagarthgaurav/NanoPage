@@ -71,26 +71,6 @@ void app_power_mark_activity(void)
 	last_activity_ms = k_uptime_get();
 }
 
-void app_power_show_wake_message(void)
-{
-	uint16_t cols, rows;
-
-	if (!woke_from_system_off) {
-		return;
-	}
-
-	app_text_get_grid(&cols, &rows);
-	app_text_clear();
-	app_text_draw_row(rows / 2, "Waking up...");
-	app_text_full_refresh();
-
-	/* Full refresh is synchronous - without this pause, the very next
-	 * full refresh (main.c's normal status-bar draw) would overwrite
-	 * this message before it's ever actually seen.
-	 */
-	k_sleep(K_MSEC(1200));
-}
-
 /*
  * Shown as the panel's last image before power actually cuts - e-paper
  * holds it with no power draw, so this is what the screen displays for
