@@ -36,6 +36,23 @@ static bool nvs_ready;
  * app_fuel_gauge_init() over RTT, paste them in below, flip FACTORY_VALID
  * to 1, and reflash.
  */
+/*
+ * Cell voltage (mV) used to confirm a charging->not-charging STAT
+ * transition really means "charge completed" rather than "USB unplugged
+ * mid-charge" - both produce the identical STAT transition (see
+ * charger.c's own comment on STAT's HIGH meaning "complete or disabled").
+ * VSET (R6 = 27k, this board's `desired-voltage = <4200>`) regulates the
+ * charge voltage to 4.20V, and the CV-phase taper that precedes a real
+ * termination event holds the cell close to that point for the whole
+ * taper (R11's 10mOhm sense resistor drops only ~3mV even at the full
+ * 300mA charge current, so this isn't measuring a loaded/sagged rail) -
+ * a genuine completion is reliably well above this threshold. Unplugging
+ * early instead leaves the cell resting at whatever voltage its actual
+ * SOC corresponds to, which for Li-ion doesn't approach 4.1V until deep
+ * into the high-80s/90s percent, so this cleanly separates the two cases.
+ */
+#define CHARGE_COMPLETE_VOLTAGE_MV 4100
+
 #define FACTORY_VALID 0
 static const struct max17055_learned_params factory_defaults = {
 	.rcomp0 = 0,
@@ -170,15 +187,63 @@ int app_fuel_gauge_init(void)
 	return 0;
 }
 
+/*
+ * app_fuel_gauge_notify_charger_state()'s max17055_force_full() call gets
+ * the chip very close to 100% but, observed on real hardware, not always
+ * exactly there - it settles at a flat, stable ~99.0% rather than 100.0%
+ * (not a decaying/self-discharge artifact - the gap doesn't move over time
+ * at idle, and it isn't a display-rounding bug either - reg_to_percent_x10()
+ * only loses sub-0.1% precision, and the force-full write itself is a raw
+ * register passthrough with no unit conversion to lose a whole percent in).
+ * Most likely explanation: RepSOC isn't a bare, instantaneously-recomputed
+ * RepCap/FullCapRep ratio - Maxim's own internal full-detection sequence
+ * (which this app-level charger-STAT-driven trigger stands in for, since
+ * it needs the undocumented "End-of-Charge Detection" section of the
+ * MAX17055 User Guide, not available in docs/) likely also realigns the
+ * mixing/convergence state in ways a single FullCapRep write can't
+ * reproduce exactly.
+ *
+ * Rather than chase that further with more speculative register writes,
+ * this holds the *displayed* percentage at 100% for a short margin below
+ * the observed near-full reading, using the charger's STAT-confirmed
+ * completion as ground truth instead of the chip's own (slightly short)
+ * SOC computation. It self-clears the moment real usage drags the measured
+ * SOC out of that margin, so it can never mask more than a few percent of
+ * genuine depletion.
+ */
+#define CHARGE_FULL_DISPLAY_MARGIN_X10 30
+
+static bool charge_full_latched;
+
+static void apply_full_charge_latch(struct max17055_data_snapshot *snap)
+{
+	if (!charge_full_latched) {
+		return;
+	}
+
+	if (snap->soc_x10 < (1000 - CHARGE_FULL_DISPLAY_MARGIN_X10)) {
+		charge_full_latched = false;
+		return;
+	}
+
+	snap->soc_x10 = 1000;
+}
+
 int app_fuel_gauge_read(struct max17055_data_snapshot *out)
 {
-	return max17055_read_all(fg_dev, out);
+	int ret = max17055_read_all(fg_dev, out);
+
+	if (ret == 0) {
+		apply_full_charge_latch(out);
+	}
+
+	return ret;
 }
 
 int app_fuel_gauge_get_percent(uint8_t *percent)
 {
 	struct max17055_data_snapshot snap;
-	int ret = max17055_read_all(fg_dev, &snap);
+	int ret = app_fuel_gauge_read(&snap);
 
 	if (ret) {
 		return ret;
@@ -269,4 +334,27 @@ int app_fuel_gauge_save_learned_params(void)
 	       cur.rcomp0, cur.tempco, cur.full_cap_rep, cur.full_cap_nom, cur.cycles);
 
 	return 0;
+}
+
+void app_fuel_gauge_notify_charger_state(bool charging)
+{
+	static bool was_charging;
+	struct max17055_data_snapshot snap;
+
+	if (was_charging && !charging) {
+		if (max17055_read_all(fg_dev, &snap) == 0 &&
+		    snap.voltage_uv >= (int32_t)CHARGE_COMPLETE_VOLTAGE_MV * 1000) {
+			if (max17055_force_full(fg_dev) == 0) {
+				charge_full_latched = true;
+				printk("fuel_gauge: charge complete at %dmV - forced RepSOC to "
+				       "100%%\n",
+				       (int)(snap.voltage_uv / 1000));
+			} else {
+				printk("fuel_gauge: charge complete but force-full write "
+				       "failed\n");
+			}
+		}
+	}
+
+	was_charging = charging;
 }

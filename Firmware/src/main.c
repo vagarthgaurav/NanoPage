@@ -52,6 +52,8 @@ static struct k_work_delayable footer_draw_work;
  */
 static void on_header_event(void)
 {
+	app_fuel_gauge_notify_charger_state(app_charger_is_charging());
+
 	if (app_header_update(HEADER_FOLDER_PLACEHOLDER) > 0) {
 		app_text_flush();
 	}

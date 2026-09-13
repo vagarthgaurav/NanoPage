@@ -351,6 +351,27 @@ int max17055_restore_capacity(const struct device *dev,
 	return reg_write_verify(dev, REG_CYCLES, learned->cycles); /* 4.11 */
 }
 
+int max17055_force_full(const struct device *dev)
+{
+	uint16_t rep_cap;
+	int ret = reg_read(dev, REG_REPCAP, &rep_cap);
+
+	if (ret) {
+		return ret;
+	}
+
+	/* RepCap and FullCapRep share the same capacity register format (5
+	 * uVh/Rsense per LSB - see mah_to_reg()/reg_to_mah() above), so this
+	 * is a raw passthrough with no unit conversion, same as the
+	 * FullCapRep write in max17055_restore_capacity() above. Setting
+	 * FullCapRep equal to RepCap is exactly what this chip's own
+	 * automatic "full detection" does internally when it fires - see
+	 * the caller (fuel_gauge.c's app_fuel_gauge_notify_charger_state())
+	 * for why that automatic path can't be relied on here.
+	 */
+	return reg_write_verify(dev, REG_FULLCAPREP, rep_cap);
+}
+
 int max17055_read_learned_params(const struct device *dev, struct max17055_learned_params *out)
 {
 	int ret;

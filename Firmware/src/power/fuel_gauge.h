@@ -65,4 +65,32 @@ bool app_fuel_gauge_should_save_learned_params(void);
  */
 int app_fuel_gauge_save_learned_params(void);
 
+/*
+ * Feed the charger's STAT-derived charging state (see charger.c's
+ * app_charger_is_charging()) in here on every change - harmless to also
+ * call it on unrelated ticks (e.g. the RTC minute alarm), since it only
+ * acts on an actual charging->not-charging transition.
+ *
+ * Works around a real MAX17055 limitation, not a bug in this board's I2C
+ * config: the chip's own automatic full detection (RepSOC -> 100%,
+ * FullCapRep <- RepCap) only fires once RepSOC has already crossed the
+ * FullSOCthr gate, left at its POR default (~95%) since this board's
+ * "Option 2: Custom Short INI" max17055_configure() sequence never writes
+ * it (docs/max17055-software-implementation-guide.pdf only writes
+ * FullSOCthr under Option 3's Custom Full INI). On a battery whose
+ * impedance-track model hasn't converged yet - e.g. the very first real
+ * charge cycle, characterizing from scratch - RepSOC can plateau below
+ * that 95% gate even once the charger has genuinely finished, so the
+ * automatic correction never fires and the display sticks at whatever
+ * RepSOC happened to reach (e.g. 68%).
+ *
+ * Fixed by using the BQ25170's STAT pin as ground truth instead: on a
+ * charging->not-charging transition, if cell voltage confirms the CV-phase
+ * taper actually completed (as opposed to USB simply being unplugged
+ * mid-charge - both cause the identical STAT transition, see charger.c's
+ * own comment), this manually performs the same FullCapRep <- RepCap
+ * update the chip's own full detection would have done.
+ */
+void app_fuel_gauge_notify_charger_state(bool charging);
+
 #endif /* APP_FUEL_GAUGE_H_ */

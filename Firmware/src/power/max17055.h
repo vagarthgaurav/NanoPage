@@ -125,6 +125,18 @@ int max17055_clear_por(const struct device *dev);
  */
 int max17055_read_all(const struct device *dev, struct max17055_data_snapshot *out);
 
+/*
+ * Force RepSOC to 100% by setting FullCapRep (0x10) equal to the chip's
+ * current RepCap (0x05) - a direct, minimal register write, not a
+ * multi-step sequence. This is exactly what the MAX17055's own automatic
+ * "full detection" does internally once it fires; see fuel_gauge.c's
+ * app_fuel_gauge_notify_charger_state() for why that automatic path can
+ * silently never fire on this board's configuration, and why an external
+ * (charger-STAT-driven) trigger is needed instead.
+ * Returns 0 on success, negative errno on I2C failure.
+ */
+int max17055_force_full(const struct device *dev);
+
 /* Read just the fields struct max17055_learned_params needs - cheaper
  * than max17055_read_all() when that's all the caller needs (the periodic
  * save-to-flash path).
