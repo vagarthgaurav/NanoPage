@@ -13,22 +13,26 @@ target_sources(app PRIVATE
 	src/drivers/buttons.c
 	src/display/display.c
 	src/ui/text.c
-	src/ui/font_tamzen.c
-	src/ui/font_siji.c
+	src/ui/fonts/font_tamzen.c
+	src/ui/fonts/font_siji.c
 	src/ui/header.c
 	src/ui/footer.c
 	src/ui/browser.c
+	src/ui/reader.c
 	src/power/max17055.c
 	src/power/fuel_gauge.c
 	src/power/charger.c
 	src/power/power.c
 	src/storage/sd.c
+	src/book/npb.c
 )
 
 target_include_directories(app PRIVATE
 	src/display
 	src/ui
+	src/ui/fonts
 	src/power
 	src/drivers
 	src/storage
+	src/book
 )

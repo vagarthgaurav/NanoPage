@@ -10,8 +10,10 @@
  * next to each name, a cursor icon on the selected row. Registers itself
  * as buttons.h's press callback: Prev/Next move the selection cursor,
  * Action opens the selected folder (or goes up a level for the synthetic
- * ".." entry shown whenever the current directory isn't the SD root) -
- * selecting a plain file currently does nothing (no reader yet).
+ * ".." entry shown whenever the current directory isn't the SD root), or -
+ * for a plain file whose name ends in ".npb" - hands off to reader.h's
+ * book reader (which takes over button input until the book is closed,
+ * see reader.h). Selecting any other plain file does nothing.
  *
  * Refresh policy:
  *   - A cursor move that stays on the current page redraws only the two

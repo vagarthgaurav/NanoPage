@@ -25,4 +25,22 @@ extern const struct cfb_font font_tamzen_6x16;
  */
 #define FONT_TAMZEN_NATIVE_HEIGHT 12
 
+/*
+ * Tamzen8x16r.bdf (sunaku/tamzen-font) - Tamzen's native 8x16 size, no
+ * bottom-padding needed (FONTBOUNDINGBOX is already 16px tall). The
+ * NPB_FONT_TAMZEN_MEDIUM size from docs/book-format.md - see npb.h/reader.c
+ * for how a .npb file's variant is matched to whichever of these fonts is
+ * actually the active grid font.
+ */
+extern const struct cfb_font font_tamzen_8x16;
+
+/*
+ * Tamzen10x20r.bdf (sunaku/tamzen-font) - Tamzen's native 10x20 size,
+ * bottom-padded to 24px (4 blank rows appended below the glyph, same
+ * bottom-padding convention as font_tamzen_6x16 above) since
+ * CFB_FONT_MONO_VPACKED needs a multiple of 8. The NPB_FONT_TAMZEN_LARGE
+ * size from docs/book-format.md.
+ */
+extern const struct cfb_font font_tamzen_10x24;
+
 #endif /* APP_FONT_TAMZEN_H_ */

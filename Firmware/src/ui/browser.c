@@ -9,6 +9,7 @@
 #include "buttons.h"
 #include "font_siji.h"
 #include "header.h"
+#include "reader.h"
 #include "sd.h"
 #include "text.h"
 
@@ -57,6 +58,8 @@ static uint16_t content_start_row;
 static uint16_t content_rows;
 
 static uint8_t partial_count;
+
+static void on_button(enum app_button button);
 
 /*
  * load_dir()'s scratch buffer for app_sd_list_dir() - deliberately static/
@@ -246,14 +249,73 @@ static void move_cursor(int delta)
 	browser_flush();
 }
 
+/* Shared by both the "descend into a directory" and "open a file" paths
+ * below - current_path is always '/'-terminated or the SD root ("/") itself.
+ */
+static int build_child_path(const char *name, char *out, size_t out_size)
+{
+	size_t path_len = strlen(current_path);
+	int ret;
+
+	ret = snprintf(out, out_size, "%s%s%s", current_path,
+			(path_len > 0 && current_path[path_len - 1] == '/') ? "" : "/", name);
+	if (ret < 0 || (size_t)ret >= out_size) {
+		return -ENAMETOOLONG;
+	}
+
+	return 0;
+}
+
+static bool has_npb_extension(const char *name)
+{
+	size_t len = strlen(name);
+
+	return len > 4 && strcasecmp(name + len - 4, ".npb") == 0;
+}
+
+/*
+ * app_reader_open()'s on_exit callback for a book opened from here (see the
+ * plain-file branch of enter_selected() below) - re-registers the
+ * browser's own button callback and redraws its listing. The directory
+ * hasn't changed while a book was open, so this is just the same
+ * redraw/flush app_browser_init() itself already does at the end of its
+ * own setup, without paying for a fresh load_dir()/remount.
+ */
+static void resume_browser(void)
+{
+	app_buttons_set_press_callback(on_button);
+	redraw_page();
+	app_header_update(current_path);
+	app_text_full_refresh();
+	partial_count = 0;
+}
+
 static void enter_selected(void)
 {
 	char new_path[APP_SD_MAX_PATH_LEN];
-	size_t path_len;
 	int ret;
 
-	if (entry_count == 0 || !entries[selected_index].is_dir) {
-		return; /* a plain file - no reader yet, nothing to do */
+	if (entry_count == 0) {
+		return;
+	}
+
+	if (!entries[selected_index].is_dir) {
+		if (!has_npb_extension(entries[selected_index].name)) {
+			return; /* not a recognized book format - nothing to do */
+		}
+
+		ret = build_child_path(entries[selected_index].name, new_path, sizeof(new_path));
+		if (ret) {
+			printk("browser: path too long, not opening \"%s\"\n",
+			       entries[selected_index].name);
+			return;
+		}
+
+		ret = app_reader_open(new_path, resume_browser);
+		if (ret) {
+			printk("browser: failed to open \"%s\" (%d)\n", new_path, ret);
+		}
+		return;
 	}
 
 	if (entries[selected_index].is_parent) {
@@ -268,11 +330,8 @@ static void enter_selected(void)
 			new_path[len] = '\0';
 		}
 	} else {
-		path_len = strlen(current_path);
-		ret = snprintf(new_path, sizeof(new_path), "%s%s%s", current_path,
-				(path_len > 0 && current_path[path_len - 1] == '/') ? "" : "/",
-				entries[selected_index].name);
-		if (ret < 0 || (size_t)ret >= sizeof(new_path)) {
+		ret = build_child_path(entries[selected_index].name, new_path, sizeof(new_path));
+		if (ret) {
 			printk("browser: path too long, not entering \"%s\"\n",
 			       entries[selected_index].name);
 			return;

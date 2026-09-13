@@ -185,27 +185,41 @@ compression.
 
 ## What's implemented so far
 
-Only the two header files with struct definitions:
-
 - `Firmware/src/book/npb_format.h` — `npb_header`, `npb_variant_desc`,
   `npb_row`, `npb_chapter`, `enum npb_font_id`.
 - `Firmware/src/book/npb_bookmark_format.h` — `npb_bookmark_file`,
   `npb_bookmark`.
+- `Firmware/src/book/npb.c`/`.h` — mechanism-only `.npb` file I/O (opens
+  and validates a file against a caller-specified font, reads row-table
+  entries and text-blob spans on demand rather than loading the row table
+  into RAM, and binary-searches a blob offset to a row index). No policy
+  of its own — see `reader.c` below.
+- `Firmware/src/ui/reader.c`/`.h` — the on-device reader screen, a
+  structural sibling of `browser.c` in the same directory: opens a `.npb`
+  file the browser hands off to it (`app_browser_init()`'s listing calls
+  `app_reader_open()` for any selected `.npb` file), takes over Prev/Next
+  for page turns and Action to close back to the browser, and reads/writes
+  the `.npb.bmk` sidecar for auto-resume. Book content defaults to the
+  smallest font (`APP_TEXT_FONT_TAMZEN`) independent of whatever font the
+  header/footer/browser are using, via `text.c`'s `app_text_draw_text_px()`
+  (pixel-addressed, not tied to the active font's row grid — needed since
+  `APP_TEXT_FONT_TAMZEN_LARGE`'s 24px lines don't share a row boundary with
+  the header/footer's 16px rows). `app_reader_set_font()` is a ready hook
+  for a future settings menu (none exists yet) to change the size and
+  reflow the currently-open book in place.
+- `Firmware/Converter/epub2npb.py` (plus `epub_reader.py`/`npb_struct.py`/
+  `transliterate.py`/`wrap.py`) — the PC-side EPUB → `.npb` converter.
+- `Firmware/src/ui/fonts/font_tamzen.c`/`.h` — all three Tamzen sizes
+  (`font_tamzen_6x16`/`_8x16`/`_10x24`), converted from the upstream BDF
+  glyphs (`sunaku/tamzen-font`) and independently verified before ever
+  flashing by rendering the generated arrays back through `text.c`'s exact
+  bit convention and comparing pixel-for-pixel against the source BDF.
 
-Nothing reads or writes these structs yet. Two independent next steps,
-either of which can come first:
-
-1. **The PC-side EPUB → `.npb` converter.** Unzip the EPUB, walk the OPF
-   manifest/spine for reading order, strip each XHTML chapter to plain
-   paragraphs, transliterate to ASCII, greedily word-wrap per font
-   variant's column count, and emit the file per the layout above.
-2. **The on-device reader screen** (`Firmware/src/book/reader.c`, a
-   structural sibling of `Firmware/src/ui/browser.c`): opens a `.npb`
-   file the browser hands off to it, owns its own button callback and
-   refresh-policy counter (same pattern as `browser.c`), and reads/writes
-   the `.npb.bmk` sidecar. Needs its own plan — button mapping, whether
-   header/footer chrome stays visible while reading, and how it hooks
-   into `power.c`'s idle-timeout/System-OFF path (which today unmounts
-   the SD card unconditionally with no "notify the active screen first"
-   hook — see the exploration notes from the 2026-09-13 planning session
-   for the exact gap) are all still open.
+Not yet built: chapter navigation/jump, the explicit-bookmark slots
+(`NPB_MAX_BOOKMARKS`), and any actual settings-menu UI to call
+`app_reader_set_font()` — button mapping for a menu is still an open
+question, since Prev/Next/Action are already fully committed to paging and
+closing while a book is open. How the reader hooks into `power.c`'s
+idle-timeout/System-OFF path (which today unmounts the SD card
+unconditionally with no "notify the active screen first" hook) is also
+still open.

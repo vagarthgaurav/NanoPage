@@ -166,4 +166,15 @@ struct app_sd_dirent {
 int app_sd_list_dir(const char *path, struct app_sd_dirent *entries, size_t max_entries,
 		     size_t *count);
 
+/*
+ * Prepends the SD filesystem's internal mount point to an SD-root-relative
+ * path (e.g. "/books/foo.npb" -> "/SD:/books/foo.npb") - the same prefixing
+ * app_sd_list_dir() does internally, exposed for a caller (reader.c) that
+ * needs to fs_open()/fs_read()/fs_write() a plain file directly rather than
+ * list a directory. Requires the card to already be mounted, same as
+ * app_sd_list_dir(). Returns 0 on success, -ENAMETOOLONG if the result
+ * doesn't fit `out_size`, -ENODEV if the card isn't mounted.
+ */
+int app_sd_full_path(const char *path, char *out, size_t out_size);
+
 #endif /* APP_SD_H_ */

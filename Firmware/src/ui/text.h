@@ -34,6 +34,21 @@ enum app_text_font {
 				   * Chosen size for menu/list UI text - see
 				   * the font-selection note in text.c.
 				   */
+	APP_TEXT_FONT_TAMZEN_MEDIUM = 4, /* 8x16px cells - Tamzen8x16r.bdf,
+					  * native size, no padding needed.
+					  * docs/book-format.md's
+					  * NPB_FONT_TAMZEN_MEDIUM.
+					  */
+	APP_TEXT_FONT_TAMZEN_LARGE = 5, /* 10x24px cells - Tamzen10x20r.bdf,
+					 * bottom-padded from its native 20px
+					 * height to the next multiple of 8.
+					 * docs/book-format.md's
+					 * NPB_FONT_TAMZEN_LARGE. Taller than
+					 * every other font here (24px vs.
+					 * 16px), so it can only ever be drawn
+					 * via app_text_draw_text_px() - see
+					 * that function's doc comment.
+					 */
 };
 
 /*
@@ -55,6 +70,18 @@ int app_text_set_font(enum app_text_font font);
 
 /* Character grid size (columns, rows) for the current font. */
 void app_text_get_grid(uint16_t *cols, uint16_t *rows);
+
+/*
+ * Glyph width/height and column count for `font`, independent of whatever
+ * font is currently active (app_text_set_font()/app_text_get_grid()
+ * describe the LIVE grid; this describes any compiled-in font purely from
+ * its own dimensions). For a caller (npb.c) that needs to validate a .npb
+ * file's variant against a font other than whatever's currently on screen
+ * - see app_text_draw_row_font() below for why that's a real case, not
+ * hypothetical.
+ */
+void app_text_font_info(enum app_text_font font, uint16_t *glyph_width, uint16_t *glyph_height,
+			 uint16_t *cols);
 
 /* Clear the framebuffer to blank/white and mark every row dirty. Does not
  * touch the panel until app_text_flush()/app_text_full_refresh().
@@ -103,6 +130,27 @@ uint16_t app_text_row_height(void);
  * native_height exceeds the current font's cell height.
  */
 int app_text_draw_row_bottom_aligned(uint16_t row, const char *str, uint16_t native_height);
+
+/*
+ * Like app_text_draw_row(), but renders using `font` explicitly at an
+ * absolute pixel row `y_px` instead of a row index into the currently
+ * active font's grid - for a caller (reader.c) that wants a different font
+ * for its own content than the rest of the UI (header.c/footer.c/
+ * browser.c) is using, without disturbing the global active font those
+ * depend on (switching the active font via app_text_set_font() would also
+ * reflow grid_cols/icon pixel positions out from under whichever of those
+ * is still relying on the old grid). Bypassing row-indexing entirely (vs.
+ * an earlier version of this function that took a row index and required
+ * matching the active font's row height) is what lets `font` be a
+ * DIFFERENT height than the active font too - e.g. reader.c's
+ * APP_TEXT_FONT_TAMZEN_LARGE (24px lines) coexisting with the header/
+ * footer's 16px rows, each independently dirty-tracked at 8px-band
+ * granularity (see mark_dirty_px() in text.c).
+ * `y_px` must be a multiple of 8 (a whole number of dirty-tracking bands)
+ * and `y_px + font's height` must fit within the panel - returns -EINVAL
+ * otherwise.
+ */
+int app_text_draw_text_px(uint16_t y_px, const char *str, enum app_text_font font);
 
 /*
  * Draw a siji icon glyph (font_siji.h) at a raw pixel x-offset within a

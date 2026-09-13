@@ -77,14 +77,26 @@ STRUCT_SECTION_START_EXTERN(cfb_font);
  * iterable section - see font_tamzen.c for why).
  */
 #define APP_TEXT_NUM_BUILTIN_FONTS 3
-/* Total selectable fonts, built-in + font_tamzen_6x16 - the valid range
- * for enum app_text_font.
+/* Total selectable fonts, built-in + font_tamzen_6x16 + font_tamzen_8x16 +
+ * font_tamzen_10x24 - the valid range for enum app_text_font.
  */
-#define APP_TEXT_NUM_FONTS 4
-/* 128px panel height / 16px smallest font row = 8 rows, max across fonts. */
+#define APP_TEXT_NUM_FONTS 6
+/* 128px panel height / 16px smallest font row = 8 rows, max across fonts
+ * that share the active font's row height (app_text_draw_row() and
+ * friends - the row-indexed API). app_text_draw_text_px() below bypasses
+ * this entirely for a caller (reader.c) that needs a taller font's rows
+ * (e.g. APP_TEXT_FONT_TAMZEN_LARGE's 24px lines) to coexist with a
+ * shorter active font's row grid (e.g. the header/footer's 16px rows) -
+ * see its own doc comment in text.h for why that's a real need.
+ */
 #define APP_TEXT_MAX_ROWS 8
+/* 128px panel height / 8px band = 16 bands, fixed for this panel - the
+ * dirty-tracking granularity every font's rows (of any height, since every
+ * supported font height is a multiple of 8) decompose into.
+ */
+#define APP_TEXT_MAX_BANDS 16
 
-struct row_dirty {
+struct band_dirty {
 	bool dirty;
 	uint16_t x_min;
 	uint16_t x_max; /* exclusive */
@@ -132,7 +144,8 @@ static uint16_t grid_rows;
  */
 static bool mirror_x;
 
-static struct row_dirty rows_dirty[APP_TEXT_MAX_ROWS];
+static uint16_t total_bands; /* fb_height / 8, set once in app_text_init() */
+static struct band_dirty bands_dirty[APP_TEXT_MAX_BANDS];
 
 static struct {
 	bool visible;
@@ -145,26 +158,40 @@ static inline const struct cfb_font *font_entry(enum app_text_font font)
 	if (font == APP_TEXT_FONT_TAMZEN) {
 		return &font_tamzen_6x16;
 	}
+	if (font == APP_TEXT_FONT_TAMZEN_MEDIUM) {
+		return &font_tamzen_8x16;
+	}
+	if (font == APP_TEXT_FONT_TAMZEN_LARGE) {
+		return &font_tamzen_10x24;
+	}
 
 	return &TYPE_SECTION_START(cfb_font)[font];
 }
 
-static void mark_dirty(uint16_t row, uint16_t x_min, uint16_t x_max)
+/*
+ * Marks dirty the band(s) spanning pixel rows [y, y+height) - `height` must
+ * be a multiple of 8 (true of every supported font height) so it always
+ * covers a whole number of bands. Band granularity (not row granularity)
+ * is what lets a font taller or shorter than the currently active one
+ * (app_text_draw_text_px() below) mark exactly the bands it touched,
+ * without needing to agree with the active font's own row height.
+ */
+static void mark_dirty_px(uint16_t y, uint16_t height, uint16_t x_min, uint16_t x_max)
 {
-	struct row_dirty *d;
+	uint16_t band0 = y / 8;
+	uint16_t nbands = height / 8;
 
-	if (row >= grid_rows) {
-		return;
-	}
+	for (uint16_t b = band0; b < band0 + nbands && b < total_bands; b++) {
+		struct band_dirty *d = &bands_dirty[b];
 
-	d = &rows_dirty[row];
-	if (!d->dirty) {
-		d->dirty = true;
-		d->x_min = x_min;
-		d->x_max = x_max;
-	} else {
-		d->x_min = MIN(d->x_min, x_min);
-		d->x_max = MAX(d->x_max, x_max);
+		if (!d->dirty) {
+			d->dirty = true;
+			d->x_min = x_min;
+			d->x_max = x_max;
+		} else {
+			d->x_min = MIN(d->x_min, x_min);
+			d->x_max = MAX(d->x_max, x_max);
+		}
 	}
 }
 
@@ -273,7 +300,7 @@ static void invert_cell(uint16_t row, uint16_t col)
 		}
 	}
 
-	mark_dirty(row, px, px + f->width);
+	mark_dirty_px(py, f->height, px, px + f->width);
 }
 
 void app_text_clear(void)
@@ -284,10 +311,10 @@ void app_text_clear(void)
 
 	memset(fb_buf, 0xFF, fb_size);
 
-	for (uint16_t row = 0; row < APP_TEXT_MAX_ROWS; row++) {
-		rows_dirty[row].dirty = (row < grid_rows);
-		rows_dirty[row].x_min = 0;
-		rows_dirty[row].x_max = fb_width;
+	for (uint16_t b = 0; b < total_bands; b++) {
+		bands_dirty[b].dirty = true;
+		bands_dirty[b].x_min = 0;
+		bands_dirty[b].x_max = fb_width;
 	}
 
 	cursor.visible = false;
@@ -341,6 +368,7 @@ int app_text_init(enum app_text_font font)
 	fb_height = height;
 	fb_pitch = width; /* one byte per column per 8-row band */
 	fb_size = (size_t)fb_pitch * (height / 8U);
+	total_bands = MIN(height / 8U, APP_TEXT_MAX_BANDS);
 
 	fb_buf = k_malloc(fb_size);
 	if (!fb_buf) {
@@ -363,6 +391,16 @@ void app_text_get_grid(uint16_t *cols, uint16_t *rows)
 	*rows = grid_rows;
 }
 
+void app_text_font_info(enum app_text_font font, uint16_t *glyph_width, uint16_t *glyph_height,
+			 uint16_t *cols)
+{
+	const struct cfb_font *f = font_entry(font);
+
+	*glyph_width = f->width;
+	*glyph_height = f->height;
+	*cols = fb_width / f->width;
+}
+
 int app_text_draw_cell(uint16_t row, uint16_t col, char c)
 {
 	const struct cfb_font *f;
@@ -377,7 +415,7 @@ int app_text_draw_cell(uint16_t row, uint16_t col, char c)
 	py = row * f->height;
 
 	draw_glyph(f, (unsigned char)c, px, py);
-	mark_dirty(row, px, px + f->width);
+	mark_dirty_px(py, f->height, px, px + f->width);
 
 	/* Redrawing over the cursor cell leaves a stale inverted glyph -
 	 * drop cursor tracking rather than let that happen silently.
@@ -398,7 +436,7 @@ int app_text_draw_cell(uint16_t row, uint16_t col, char c)
  */
 int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon)
 {
-	uint16_t py;
+	uint16_t py, row_height;
 
 	if (!fb_buf || row >= grid_rows) {
 		return -EINVAL;
@@ -408,10 +446,15 @@ int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon)
 		return -EINVAL;
 	}
 
-	py = row * font_entry(cur_font)->height;
+	row_height = font_entry(cur_font)->height;
+	py = row * row_height;
 
 	draw_glyph(&font_siji_icons, (unsigned char)icon, x, py);
-	mark_dirty(row, x, x + font_siji_icons.width);
+	/* Marks the whole row's band range dirty, not just the icon's own
+	 * 16px - consistent with every other per-row draw here, and matters
+	 * when the active font's row is taller than the icon (e.g. LARGE).
+	 */
+	mark_dirty_px(py, row_height, x, x + font_siji_icons.width);
 
 	return 0;
 }
@@ -428,19 +471,20 @@ uint16_t app_text_row_height(void)
 
 int app_text_draw_hline(uint16_t row, uint16_t y_in_row, bool black)
 {
+	uint16_t row_height = font_entry(cur_font)->height;
 	uint16_t py;
 
-	if (!fb_buf || row >= grid_rows || y_in_row >= font_entry(cur_font)->height) {
+	if (!fb_buf || row >= grid_rows || y_in_row >= row_height) {
 		return -EINVAL;
 	}
 
-	py = row * font_entry(cur_font)->height + y_in_row;
+	py = row * row_height + y_in_row;
 
 	for (uint16_t x = 0; x < fb_width; x++) {
 		set_pixel(x, py, black);
 	}
 
-	mark_dirty(row, 0, fb_width);
+	mark_dirty_px(row * row_height, row_height, 0, fb_width);
 
 	return 0;
 }
@@ -458,6 +502,39 @@ int app_text_draw_row(uint16_t row, const char *str)
 	for (uint16_t col = 0; col < grid_cols; col++) {
 		app_text_draw_cell(row, col, (col < len) ? str[col] : ' ');
 	}
+
+	return 0;
+}
+
+int app_text_draw_text_px(uint16_t y_px, const char *str, enum app_text_font font)
+{
+	const struct cfb_font *f = font_entry(font);
+	uint16_t cols;
+	size_t len;
+
+	if (!fb_buf || y_px % 8 != 0 || (uint32_t)y_px + f->height > fb_height) {
+		return -EINVAL;
+	}
+
+	cols = fb_width / f->width;
+	len = strlen(str);
+
+	for (uint16_t col = 0; col < cols; col++) {
+		unsigned char c = (col < len) ? (unsigned char)str[col] : ' ';
+
+		draw_glyph(f, c, col * f->width, y_px);
+	}
+
+	mark_dirty_px(y_px, f->height, 0, fb_width);
+
+	/*
+	 * Pixel-addressed, so it can't check against the row/col-indexed
+	 * cursor the way app_text_draw_cell()/app_text_draw_row() do - not a
+	 * problem in practice, since the cursor (app_text_set_cursor()) and
+	 * this function are never used by the same screen (the former is an
+	 * unused-so-far row/col grid primitive; this one is reader.c's
+	 * content rendering, which has no cursor concept of its own).
+	 */
 
 	return 0;
 }
@@ -486,7 +563,7 @@ int app_text_draw_row_bottom_aligned(uint16_t row, const char *str, uint16_t nat
 		draw_glyph_bottom(f, c, col * f->width, py, f->height, native_height);
 	}
 
-	mark_dirty(row, 0, fb_width);
+	mark_dirty_px(py, f->height, 0, fb_width);
 
 	/* Same reasoning as app_text_draw_cell(): redrawing over the cursor
 	 * cell leaves a stale inverted glyph.
@@ -525,52 +602,52 @@ int app_text_set_cursor(uint16_t row, uint16_t col, bool visible)
 
 int app_text_flush(void)
 {
-	const struct cfb_font *f = font_entry(cur_font);
-	uint16_t row = 0;
+	uint16_t band = 0;
 
-	while (row < grid_rows) {
+	while (band < total_bands) {
 		uint16_t run_start, run_end, x_min, x_max;
-		uint16_t x, w, y, h, band0, nbands;
+		uint16_t x, w, y, h, nbands;
 		size_t buf_size;
 		uint8_t *tmp;
 		int ret;
 
-		if (!rows_dirty[row].dirty) {
-			row++;
+		if (!bands_dirty[band].dirty) {
+			band++;
 			continue;
 		}
 
 		/*
-		 * Coalesce a run of consecutive dirty rows into ONE combined
-		 * app_display_refresh_partial() call instead of one per row.
-		 * Each SSD1680 partial refresh pays its own fixed BUSY-wait
-		 * (~530ms measured, largely independent of rectangle size -
-		 * it's the waveform settling, not the SPI clock-out, that
-		 * dominates) regardless of how small the changed region is,
-		 * so flushing N adjacent rows separately costs ~N times what
-		 * one combined taller rectangle does. This matters most for
-		 * two callers: a cursor move (browser.c) dirties exactly two
-		 * *adjacent* rows (old + new cursor position, always one row
-		 * apart within a page), and a full-page redraw (also
-		 * browser.c) dirties every visible content row at once - both
-		 * used to show up as a visibly slow, one-row-at-a-time
-		 * flicker; a run merges into a single refresh instead. The
-		 * combined rectangle's x-range is the union of every row's
-		 * own dirty x-range in the run - rows with a narrower range
-		 * than the run's widest just resend a bit of already-correct
-		 * pixel data alongside, harmless (no visual difference, only
-		 * a slightly bigger SPI transfer).
+		 * Coalesce a run of consecutive dirty 8px bands into ONE
+		 * combined app_display_refresh_partial() call instead of one
+		 * per band. Each SSD1680 partial refresh pays its own fixed
+		 * BUSY-wait (~530ms measured, largely independent of
+		 * rectangle size - it's the waveform settling, not the SPI
+		 * clock-out, that dominates) regardless of how small the
+		 * changed region is, so flushing N adjacent bands separately
+		 * costs ~N times what one combined taller rectangle does.
+		 * This matters most for two callers: a cursor move
+		 * (browser.c) dirties exactly two *adjacent* rows (old + new
+		 * cursor position, always one row apart within a page), and
+		 * a full-page redraw (also browser.c) dirties every visible
+		 * content row at once - both used to show up as a visibly
+		 * slow, one-row-at-a-time flicker; a run merges into a
+		 * single refresh instead. The combined rectangle's x-range
+		 * is the union of every band's own dirty x-range in the run
+		 * - bands with a narrower range than the run's widest just
+		 * resend a bit of already-correct pixel data alongside,
+		 * harmless (no visual difference, only a slightly bigger SPI
+		 * transfer).
 		 */
-		run_start = row;
-		x_min = rows_dirty[row].x_min;
-		x_max = rows_dirty[row].x_max;
-		row++;
-		while (row < grid_rows && rows_dirty[row].dirty) {
-			x_min = MIN(x_min, rows_dirty[row].x_min);
-			x_max = MAX(x_max, rows_dirty[row].x_max);
-			row++;
+		run_start = band;
+		x_min = bands_dirty[band].x_min;
+		x_max = bands_dirty[band].x_max;
+		band++;
+		while (band < total_bands && bands_dirty[band].dirty) {
+			x_min = MIN(x_min, bands_dirty[band].x_min);
+			x_max = MAX(x_max, bands_dirty[band].x_max);
+			band++;
 		}
-		run_end = row;
+		run_end = band;
 
 		/*
 		 * x/width need no alignment here - in this vtiled layout each
@@ -580,16 +657,14 @@ int app_text_flush(void)
 		 * requirement in this orientation) and its write path's
 		 * `height * width / 8` byte-count math, which is exact as
 		 * long as height is a multiple of 8 - guaranteed since h is a
-		 * whole number of row heights (16/24/32 for the built-in
-		 * fonts), each already a multiple of 8.
+		 * whole number of 8px bands by construction.
 		 */
 		x = x_min;
 		w = x_max - x_min;
-		y = run_start * f->height;
-		h = (uint16_t)(run_end - run_start) * f->height;
+		y = run_start * 8;
+		nbands = run_end - run_start;
+		h = nbands * 8;
 
-		band0 = y / 8;
-		nbands = h / 8;
 		buf_size = (size_t)w * nbands;
 
 		tmp = k_malloc(buf_size);
@@ -598,8 +673,8 @@ int app_text_flush(void)
 		}
 
 		for (uint16_t b = 0; b < nbands; b++) {
-			memcpy(&tmp[(size_t)b * w], &fb_buf[(size_t)(band0 + b) * fb_pitch + x],
-			       w);
+			memcpy(&tmp[(size_t)b * w],
+			       &fb_buf[(size_t)(run_start + b) * fb_pitch + x], w);
 		}
 
 		/* See the mirror_x comment above - the panel's x position, not
@@ -613,8 +688,8 @@ int app_text_flush(void)
 			return ret;
 		}
 
-		for (uint16_t r = run_start; r < run_end; r++) {
-			rows_dirty[r].dirty = false;
+		for (uint16_t b = run_start; b < run_end; b++) {
+			bands_dirty[b].dirty = false;
 		}
 	}
 
@@ -634,8 +709,8 @@ int app_text_full_refresh(void)
 		return ret;
 	}
 
-	for (uint16_t row = 0; row < grid_rows; row++) {
-		rows_dirty[row].dirty = false;
+	for (uint16_t b = 0; b < total_bands; b++) {
+		bands_dirty[b].dirty = false;
 	}
 
 	return 0;

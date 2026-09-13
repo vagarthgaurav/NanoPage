@@ -196,15 +196,9 @@ void app_sd_deinit(void)
 	app_display_unlock();
 }
 
-int app_sd_list_dir(const char *path, struct app_sd_dirent *entries, size_t max_entries,
-		     size_t *count)
+int app_sd_full_path(const char *path, char *out, size_t out_size)
 {
-	char full_path[APP_SD_MAX_PATH_LEN];
-	struct fs_dir_t dir;
-	struct fs_dirent dirent;
 	int ret;
-
-	*count = 0;
 
 	/*
 	 * Deliberately does not mount or touch sd_power_refcount/sd_cs_gpio
@@ -217,9 +211,27 @@ int app_sd_list_dir(const char *path, struct app_sd_dirent *entries, size_t max_
 		return -ENODEV;
 	}
 
-	ret = snprintf(full_path, sizeof(full_path), "%s%s", DISK_MOUNT_PT, path);
-	if (ret < 0 || (size_t)ret >= sizeof(full_path)) {
+	ret = snprintf(out, out_size, "%s%s", DISK_MOUNT_PT, path);
+	if (ret < 0 || (size_t)ret >= out_size) {
 		return -ENAMETOOLONG;
+	}
+
+	return 0;
+}
+
+int app_sd_list_dir(const char *path, struct app_sd_dirent *entries, size_t max_entries,
+		     size_t *count)
+{
+	char full_path[APP_SD_MAX_PATH_LEN];
+	struct fs_dir_t dir;
+	struct fs_dirent dirent;
+	int ret;
+
+	*count = 0;
+
+	ret = app_sd_full_path(path, full_path, sizeof(full_path));
+	if (ret) {
+		return ret;
 	}
 
 	fs_dir_t_init(&dir);
