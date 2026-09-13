@@ -10,19 +10,19 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "config.h"
 #include "display.h"
 #include "sd.h"
 
 /*
- * Cards typically settle within a few ms to low tens of ms after
- * power-up; 20ms leaves margin over that without paying the cost of the
- * original, more conservative 100ms on every refresh (this delay is now
- * incurred far more often than "once per session" - see the per-refresh
- * bracketing note in sd.h, so its cost actually matters for battery
- * life). Revisit upward if mount/read ever proves flaky against a
- * real card.
+ * APP_SD_POWER_UP_DELAY_MS (config.h): cards typically settle within a
+ * few ms to low tens of ms after power-up; 20ms leaves margin over that
+ * without paying the cost of the original, more conservative 100ms on
+ * every refresh (this delay is now incurred far more often than "once
+ * per session" - see the per-refresh bracketing note in sd.h, so its
+ * cost actually matters for battery life). Revisit upward if mount/read
+ * ever proves flaky against a real card.
  */
-#define SD_POWER_UP_DELAY_MS 20
 
 #define DISK_DRIVE_NAME "SD"
 #define DISK_MOUNT_PT "/" DISK_DRIVE_NAME ":"
@@ -110,7 +110,7 @@ int app_sd_power_on(void)
 		return ret;
 	}
 
-	k_msleep(SD_POWER_UP_DELAY_MS);
+	k_msleep(APP_SD_POWER_UP_DELAY_MS);
 
 	sd_power_refcount = 1;
 

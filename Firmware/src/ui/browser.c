@@ -7,6 +7,7 @@
 
 #include "browser.h"
 #include "buttons.h"
+#include "config.h"
 #include "font_siji.h"
 #include "header.h"
 #include "reader.h"
@@ -33,12 +34,12 @@
  */
 #define APP_BROWSER_MAX_ENTRIES 64
 
-/* Forces a full-panel refresh every this-many partial-refresh-triggering
- * actions (cursor moves and page scrolls - NOT folder navigation, which
- * always gets its own full refresh regardless of this counter) to clear
- * ghosting - see browser.h's top comment.
+/* APP_BROWSER_FULL_REFRESH_EVERY (config.h): forces a full-panel refresh
+ * every this-many partial-refresh-triggering actions (cursor moves and
+ * page scrolls - NOT folder navigation, which always gets its own full
+ * refresh regardless of this counter) to clear ghosting - see browser.h's
+ * top comment.
  */
-#define APP_BROWSER_FULL_REFRESH_EVERY 10
 
 struct browser_entry {
 	char name[APP_SD_MAX_NAME_LEN];

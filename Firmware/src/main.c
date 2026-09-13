@@ -6,6 +6,7 @@
 #include "browser.h"
 #include "buttons.h"
 #include "charger.h"
+#include "config.h"
 #include "display.h"
 #include "footer.h"
 #include "fuel_gauge.h"
@@ -13,24 +14,6 @@
 #include "power.h"
 #include "rtc.h"
 #include "text.h"
-
-/*
- * Footer refresh cadence: partial refresh is cheap (text.c only pushes
- * the one changed row), but even a sub-second SSD1680 "fast" waveform
- * update isn't free against the battery-life goal for a value (SOC/
- * voltage) that barely moves second to second. 30s is a placeholder -
- * revisit once there's real battery-life data to tune against. Unlike
- * the header (event-driven - see on_header_event() below), nothing tells
- * the footer's values changed, so it stays on a plain timer.
- */
-#define STATUS_REFRESH_INTERVAL_SEC 30
-
-/*
- * How long before the refresh to sample the instantaneous Current
- * register - see app_footer_sample_current() in footer.h for why this
- * needs to happen ahead of the draw rather than at draw time.
- */
-#define STATUS_CURRENT_SAMPLE_LEAD_SEC 5
 
 /* app_header_update()'s "folder" argument (header.h) when there's no real
  * browser path to show - the browser failed to mount the SD card at boot,
@@ -86,7 +69,7 @@ static void footer_draw_handler(struct k_work *work)
 	app_power_check_idle();
 
 	k_work_schedule(&footer_sample_work,
-			K_SECONDS(STATUS_REFRESH_INTERVAL_SEC - STATUS_CURRENT_SAMPLE_LEAD_SEC));
+			K_SECONDS(APP_STATUS_REFRESH_INTERVAL_SEC - APP_STATUS_CURRENT_SAMPLE_LEAD_SEC));
 }
 
 static void footer_sample_handler(struct k_work *work)
@@ -94,7 +77,7 @@ static void footer_sample_handler(struct k_work *work)
 	ARG_UNUSED(work);
 
 	app_footer_sample_current();
-	k_work_schedule(&footer_draw_work, K_SECONDS(STATUS_CURRENT_SAMPLE_LEAD_SEC));
+	k_work_schedule(&footer_draw_work, K_SECONDS(APP_STATUS_CURRENT_SAMPLE_LEAD_SEC));
 }
 
 int main(void)
@@ -154,8 +137,8 @@ int main(void)
 		k_work_init_delayable(&footer_sample_work, footer_sample_handler);
 		k_work_init_delayable(&footer_draw_work, footer_draw_handler);
 		k_work_schedule(&footer_sample_work,
-				K_SECONDS(STATUS_REFRESH_INTERVAL_SEC -
-					  STATUS_CURRENT_SAMPLE_LEAD_SEC));
+				K_SECONDS(APP_STATUS_REFRESH_INTERVAL_SEC -
+					  APP_STATUS_CURRENT_SAMPLE_LEAD_SEC));
 
 		/*
 		 * mask = SECOND only, with tm_sec = 0, leaves minute/hour/day

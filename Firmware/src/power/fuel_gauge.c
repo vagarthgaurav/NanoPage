@@ -6,6 +6,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/storage/flash_map.h>
 
+#include "config.h"
 #include "fuel_gauge.h"
 #include "max17055.h"
 
@@ -37,21 +38,21 @@ static bool nvs_ready;
  * to 1, and reflash.
  */
 /*
- * Cell voltage (mV) used to confirm a charging->not-charging STAT
- * transition really means "charge completed" rather than "USB unplugged
- * mid-charge" - both produce the identical STAT transition (see
- * charger.c's own comment on STAT's HIGH meaning "complete or disabled").
- * VSET (R6 = 27k, this board's `desired-voltage = <4200>`) regulates the
- * charge voltage to 4.20V, and the CV-phase taper that precedes a real
- * termination event holds the cell close to that point for the whole
- * taper (R11's 10mOhm sense resistor drops only ~3mV even at the full
- * 300mA charge current, so this isn't measuring a loaded/sagged rail) -
- * a genuine completion is reliably well above this threshold. Unplugging
- * early instead leaves the cell resting at whatever voltage its actual
- * SOC corresponds to, which for Li-ion doesn't approach 4.1V until deep
- * into the high-80s/90s percent, so this cleanly separates the two cases.
+ * APP_CHARGE_COMPLETE_VOLTAGE_MV (config.h): used to confirm a
+ * charging->not-charging STAT transition really means "charge completed"
+ * rather than "USB unplugged mid-charge" - both produce the identical
+ * STAT transition (see charger.c's own comment on STAT's HIGH meaning
+ * "complete or disabled"). VSET (R6 = 27k, this board's
+ * `desired-voltage = <4200>`) regulates the charge voltage to 4.20V, and
+ * the CV-phase taper that precedes a real termination event holds the
+ * cell close to that point for the whole taper (R11's 10mOhm sense
+ * resistor drops only ~3mV even at the full 300mA charge current, so
+ * this isn't measuring a loaded/sagged rail) - a genuine completion is
+ * reliably well above this threshold. Unplugging early instead leaves
+ * the cell resting at whatever voltage its actual SOC corresponds to,
+ * which for Li-ion doesn't approach 4.1V until deep into the high-80s/
+ * 90s percent, so this cleanly separates the two cases.
  */
-#define CHARGE_COMPLETE_VOLTAGE_MV 4100
 
 #define FACTORY_VALID 0
 static const struct max17055_learned_params factory_defaults = {
@@ -209,9 +210,9 @@ int app_fuel_gauge_init(void)
  * completion as ground truth instead of the chip's own (slightly short)
  * SOC computation. It self-clears the moment real usage drags the measured
  * SOC out of that margin, so it can never mask more than a few percent of
- * genuine depletion.
+ * genuine depletion. Margin value: APP_CHARGE_FULL_DISPLAY_MARGIN_X10
+ * (config.h).
  */
-#define CHARGE_FULL_DISPLAY_MARGIN_X10 30
 
 static bool charge_full_latched;
 
@@ -221,7 +222,7 @@ static void apply_full_charge_latch(struct max17055_data_snapshot *snap)
 		return;
 	}
 
-	if (snap->soc_x10 < (1000 - CHARGE_FULL_DISPLAY_MARGIN_X10)) {
+	if (snap->soc_x10 < (1000 - APP_CHARGE_FULL_DISPLAY_MARGIN_X10)) {
 		charge_full_latched = false;
 		return;
 	}
@@ -343,7 +344,7 @@ void app_fuel_gauge_notify_charger_state(bool charging)
 
 	if (was_charging && !charging) {
 		if (max17055_read_all(fg_dev, &snap) == 0 &&
-		    snap.voltage_uv >= (int32_t)CHARGE_COMPLETE_VOLTAGE_MV * 1000) {
+		    snap.voltage_uv >= (int32_t)APP_CHARGE_COMPLETE_VOLTAGE_MV * 1000) {
 			if (max17055_force_full(fg_dev) == 0) {
 				charge_full_latched = true;
 				printk("fuel_gauge: charge complete at %dmV - forced RepSOC to "

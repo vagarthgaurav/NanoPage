@@ -6,17 +6,18 @@
 #include <zephyr/sys/util.h>
 
 #include "buttons.h"
+#include "config.h"
 #include "npb.h"
 #include "npb_bookmark_format.h"
 #include "reader.h"
 #include "sd.h"
 #include "text.h"
 
-/* See browser.h's APP_BROWSER_FULL_REFRESH_EVERY for the identical
- * reasoning - scoped to this module rather than shared, same as
- * header.c/footer.c/browser.c each owning their own refresh decisions.
+/* APP_READER_FULL_REFRESH_EVERY (config.h): see browser.h's
+ * APP_BROWSER_FULL_REFRESH_EVERY for the identical reasoning - scoped
+ * separately rather than shared, same as header.c/footer.c/browser.c each
+ * owning their own refresh decisions.
  */
-#define APP_READER_FULL_REFRESH_EVERY 10
 
 /* Longest single row this firmware will ever render - a struct npb_row's
  * length is a uint8_t (max 255), but every font variant this app supports

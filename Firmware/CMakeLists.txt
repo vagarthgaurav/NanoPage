@@ -28,6 +28,7 @@ target_sources(app PRIVATE
 )
 
 target_include_directories(app PRIVATE
+	src
 	src/display
 	src/ui
 	src/ui/fonts

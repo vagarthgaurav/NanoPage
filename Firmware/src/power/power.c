@@ -10,17 +10,17 @@
 
 #include <hal/nrf_power.h>
 
+#include "config.h"
 #include "display.h"
 #include "sd.h"
 #include "text.h"
 
 /*
- * 30 minutes of no button activity -> System OFF. Checked from whatever
- * cadence app_power_check_idle() is called at (currently main.c's 30s
+ * APP_POWER_IDLE_TIMEOUT_MS (config.h): checked from whatever cadence
+ * app_power_check_idle() is called at (currently main.c's 30s
  * status-refresh tick), so this is a floor, not a precise deadline - fine
  * given the 30s granularity is <0.2% of the timeout.
  */
-#define APP_POWER_IDLE_TIMEOUT_MS (30 * 60 * 1000)
 
 /*
  * Wake sources for System OFF. gpio-keys/the input subsystem owns these
