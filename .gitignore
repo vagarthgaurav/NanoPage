@@ -2,3 +2,5 @@
 **/.vscode/*
 Hardware/NanoPage/.history/
 Firmware/build/
+Converter/.venv/
+Converter/__pycache__/

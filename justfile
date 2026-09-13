@@ -2,6 +2,7 @@ zephyr_base := "/home/vagarth/zephyrproject"
 board := "nanopage"
 firmware_dir := justfile_directory() / "Firmware"
 build_dir := firmware_dir / "build"
+converter_dir := justfile_directory() / "Converter"
 
 # Incremental build
 build:
@@ -47,3 +48,26 @@ rtt:
 # Remove build output
 clean:
     rm -rf {{build_dir}}
+
+# Set up the EPUB->.npb converter's venv (run once, or after requirements.txt changes)
+book-setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{converter_dir}}
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -q -r requirements.txt
+
+# Convert an EPUB to .npb, e.g. `just book-convert mybook.epub` or
+# `just book-convert mybook.epub /path/to/out.npb`. For --title/--author
+# overrides, activate Converter/.venv and call epub2npb.py directly.
+book-convert epub output="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{converter_dir}}
+    source .venv/bin/activate
+    if [ -n "{{output}}" ]; then
+        python3 epub2npb.py "{{epub}}" -o "{{output}}"
+    else
+        python3 epub2npb.py "{{epub}}"
+    fi
