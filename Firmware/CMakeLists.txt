@@ -9,13 +9,19 @@ project(nanopage)
 
 target_sources(app PRIVATE
 	src/main.c
-	src/rtc.c
-	src/buttons.c
-	src/display.c
-	src/text.c
-	src/font_tamzen.c
-	src/font_siji.c
-	src/max17055.c
-	src/fuel_gauge.c
-	src/power.c
+	src/drivers/rtc.c
+	src/drivers/buttons.c
+	src/display/display.c
+	src/display/text.c
+	src/display/font_tamzen.c
+	src/display/font_siji.c
+	src/power/max17055.c
+	src/power/fuel_gauge.c
+	src/power/power.c
+)
+
+target_include_directories(app PRIVATE
+	src/display
+	src/power
+	src/drivers
 )
