@@ -12,6 +12,7 @@ target_sources(app PRIVATE
 	src/drivers/rtc.c
 	src/drivers/buttons.c
 	src/display/display.c
+	src/display/logo_nanopage.c
 	src/ui/text.c
 	src/ui/fonts/font_tamzen.c
 	src/ui/fonts/font_siji.c

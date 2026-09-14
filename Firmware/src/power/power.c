@@ -12,8 +12,8 @@
 
 #include "config.h"
 #include "display.h"
+#include "logo_nanopage.h"
 #include "sd.h"
-#include "text.h"
 
 /*
  * APP_POWER_IDLE_TIMEOUT_MS (config.h): checked from whatever cadence
@@ -74,19 +74,16 @@ void app_power_mark_activity(void)
 /*
  * Shown as the panel's last image before power actually cuts - e-paper
  * holds it with no power draw, so this is what the screen displays for
- * the whole System OFF duration, not just a transient message. A full
- * refresh (not fast/partial) so it's ghost-free no matter what was on
- * screen before.
+ * the whole System OFF duration, not just a transient message. Draws the
+ * pre-rendered NanoPage wordmark (logo_nanopage.h) straight to the panel
+ * via app_display_refresh_full() - bypassing text.c's grid entirely, since
+ * this is a full-screen bitmap, not character cells - which is also
+ * already a full/ghost-free refresh, so no separate full-refresh call is
+ * needed on top.
  */
 static void show_sleep_message(void)
 {
-	uint16_t cols, rows;
-
-	app_text_get_grid(&cols, &rows);
-	app_text_clear();
-	app_text_draw_row(rows / 2 - 1, "Sleeping...");
-	app_text_draw_row(rows / 2, "press any button to wake");
-	app_text_full_refresh();
+	app_display_refresh_full(app_logo_nanopage, sizeof(app_logo_nanopage));
 }
 
 static void enter_system_off(void)
