@@ -84,10 +84,28 @@ static void reader_flush(void)
  * the small font's bottom-aligned "free gap below the header" trick for
  * those two - every line, including the first, draws through the same
  * top-aligned path regardless of which of the three is active.
+ *
+ * Re-opens `book`'s file handle for the duration of this call and closes
+ * it again before returning - the SD card's own power/mount is a much
+ * coarser, caller-held bracket (turn_page()/app_reader_open()/
+ * app_reader_set_font() each hold one app_sd_init()/app_sd_deinit() pair
+ * around their whole action), but the underlying fs_file_t is cheap
+ * enough to reopen (a header read + a small variant-table scan) that
+ * there's no reason to also keep it resident across page turns - doing so
+ * would mean carrying a stale handle across an app_sd_deinit() unmount,
+ * which is what this file used to do back when the card stayed mounted
+ * for the browser/reader's entire lifetime. `book`'s other fields (row
+ * count, table offsets, font_id) are left untouched by npb_close(), so
+ * they stay valid and reusable (e.g. turn_page()'s bounds check) even
+ * while the file itself is closed between calls.
  */
 static void render_page(void)
 {
 	char buf[APP_READER_MAX_ROW_CHARS];
+
+	if (npb_open(full_path_buf, reader_font, &book)) {
+		return;
+	}
 
 	for (uint16_t i = 0; i < content_rows; i++) {
 		uint16_t y_px = content_top_px + i * reader_font_height;
@@ -107,11 +125,17 @@ static void render_page(void)
 
 		app_text_draw_text_px(y_px, text, reader_font);
 	}
+
+	npb_close(&book);
 }
 
 /* The blob offset of whatever's currently at the top of the visible page -
  * what gets persisted as the sidecar's resume position. Falls back to 0
  * (start of book) if the row read fails or the page is past the end.
+ * Assumes `book`'s file is already open (see render_page()'s doc comment
+ * on why the file itself is opened/closed per call rather than held
+ * across the reading session) - callers reopen it around this the same
+ * way render_page() does.
  */
 static uint32_t current_blob_offset(void)
 {
@@ -128,14 +152,20 @@ static void save_bookmark(void)
 {
 	struct npb_bookmark_file bmk;
 	struct fs_file_t f;
+	uint32_t last_position = 0;
 	int ret;
+
+	if (npb_open(full_path_buf, reader_font, &book) == 0) {
+		last_position = current_blob_offset();
+		npb_close(&book);
+	}
 
 	memset(&bmk, 0, sizeof(bmk));
 	memcpy(bmk.magic, NPB_BOOKMARK_MAGIC, sizeof(bmk.magic));
 	bmk.version = NPB_BOOKMARK_VERSION;
 	bmk.last_font_id = book.font_id;
 	bmk.bookmark_count = 0;
-	bmk.last_position = current_blob_offset();
+	bmk.last_position = last_position;
 
 	fs_file_t_init(&f);
 	ret = fs_open(&f, bmk_path, FS_O_CREATE | FS_O_WRITE);
@@ -201,6 +231,18 @@ static void turn_page(int direction)
 		page_start_row += content_rows;
 	}
 
+	/*
+	 * One app_sd_init()/app_sd_deinit() bracket for the whole page turn -
+	 * render_page() and save_bookmark() each open/close the book's file
+	 * handle internally (see render_page()'s doc comment), but the SD
+	 * card's own power/mount is held here at the coarser per-action
+	 * granularity so it's paid once per turn, not twice.
+	 */
+	if (app_sd_init()) {
+		printk("reader: SD unavailable, page turn not saved\n");
+		return;
+	}
+
 	render_page();
 	reader_flush();
 
@@ -209,14 +251,19 @@ static void turn_page(int direction)
 	 * sidecar policy - see reader.h.
 	 */
 	save_bookmark();
+
+	app_sd_deinit();
 }
 
 static void close_reader(void)
 {
 	void (*cb)(void) = exit_cb;
 
-	save_bookmark();
-	npb_close(&book);
+	if (app_sd_init() == 0) {
+		save_bookmark();
+		app_sd_deinit();
+	}
+
 	exit_cb = NULL;
 	book_open = false;
 
@@ -300,6 +347,8 @@ static int open_book_at_font(uint32_t resume_offset, bool have_resume_offset)
 		load_bookmark();
 	}
 
+	npb_close(&book);
+
 	return 0;
 }
 
@@ -307,20 +356,36 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 {
 	int ret;
 
+	/*
+	 * One app_sd_init()/app_sd_deinit() bracket for the whole open
+	 * sequence (resolve path, parse header/variant table, read the
+	 * bookmark sidecar, render the first page) - see turn_page()'s
+	 * identical reasoning. app_sd_full_path() itself needs the card
+	 * already mounted (sd.h), hence starting the bracket before it.
+	 */
+	ret = app_sd_init();
+	if (ret) {
+		printk("reader: SD init failed (%d)\n", ret);
+		return ret;
+	}
+
 	ret = app_sd_full_path(path, full_path_buf, sizeof(full_path_buf));
 	if (ret) {
 		printk("reader: couldn't resolve \"%s\" (%d)\n", path, ret);
+		app_sd_deinit();
 		return ret;
 	}
 
 	ret = snprintf(bmk_path, sizeof(bmk_path), "%s.bmk", full_path_buf);
 	if (ret < 0 || (size_t)ret >= sizeof(bmk_path)) {
 		printk("reader: bookmark sidecar path too long for \"%s\"\n", path);
+		app_sd_deinit();
 		return -ENAMETOOLONG;
 	}
 
 	ret = open_book_at_font(0, false);
 	if (ret) {
+		app_sd_deinit();
 		return ret;
 	}
 
@@ -331,8 +396,10 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 	render_page();
 
 	ret = app_text_full_refresh();
+
+	app_sd_deinit();
+
 	if (ret) {
-		npb_close(&book);
 		exit_cb = NULL;
 		book_open = false;
 		return ret;
@@ -359,10 +426,26 @@ void app_reader_set_font(enum app_text_font font)
 		return;
 	}
 
-	uint32_t resume_offset = current_blob_offset();
 	enum app_text_font old_font = reader_font;
+	uint32_t resume_offset = 0;
 
-	npb_close(&book);
+	/*
+	 * One app_sd_init()/app_sd_deinit() bracket for the whole font-change
+	 * sequence - see turn_page()'s identical reasoning. The book's file
+	 * is closed between actions (render_page()'s doc comment), so it's
+	 * reopened here just long enough to read the current position before
+	 * switching variants.
+	 */
+	if (app_sd_init()) {
+		printk("reader: SD init failed for font change\n");
+		return;
+	}
+
+	if (npb_open(full_path_buf, old_font, &book) == 0) {
+		resume_offset = current_blob_offset();
+		npb_close(&book);
+	}
+
 	reader_font = font;
 
 	if (open_book_at_font(resume_offset, true)) {
@@ -382,6 +465,7 @@ void app_reader_set_font(enum app_text_font font)
 			 */
 			book_open = false;
 			app_buttons_set_press_callback(NULL);
+			app_sd_deinit();
 			return;
 		}
 	}
@@ -389,4 +473,6 @@ void app_reader_set_font(enum app_text_font font)
 	render_page();
 	app_text_full_refresh();
 	partial_count = 0;
+
+	app_sd_deinit();
 }

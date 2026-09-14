@@ -152,12 +152,14 @@ struct app_sd_dirent {
  * not, rather than mounting or touching the power switch/CS pin itself
  * (see the two-mechanism backfeed writeup above for why those stay
  * confined to app_sd_init()/app_sd_deinit()/app_sd_power_on()/
- * app_sd_power_off()). A caller doing one one-shot listing should
- * bracket this call with its own app_sd_init()/app_sd_deinit() pair; a
- * file browser listing many directories in a row (navigating in and out
- * of folders) should mount once up front and call this repeatedly
- * instead, to avoid re-paying SD_POWER_UP_DELAY_MS and a full remount
- * per folder.
+ * app_sd_power_off()). Every caller in this app (browser.c's load_dir(),
+ * one call per listing) brackets each individual call with its own
+ * app_sd_init()/app_sd_deinit() pair rather than holding one long-lived
+ * mount across a whole browsing session - a deliberate choice to keep
+ * the card genuinely powered off between navigations/page turns, at the
+ * cost of re-paying SD_POWER_UP_DELAY_MS and a full remount on every one
+ * of them. Revisit if that per-action cost ever proves too slow in
+ * practice.
  *
  * Returns 0 on success (even if the listing was truncated to
  * max_entries), negative errno if the directory itself couldn't be

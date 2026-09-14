@@ -44,17 +44,18 @@
  */
 
 /*
- * Mounts the SD card (sd.h's app_sd_init() - left mounted for as long as
- * the browser is active, not just for this one call, so navigating
- * between folders doesn't re-pay a power-up/remount every time) and lists
- * `root` (e.g. "/" for the SD card's own root) as the first page. Also
- * registers itself via app_buttons_set_press_callback() - once this
- * returns 0, button presses drive the browser directly; don't also
- * install a separate button callback while it's active.
+ * Lists `root` (e.g. "/" for the SD card's own root) as the first page.
+ * Each listing - this call and every later folder navigation - brackets
+ * its own app_sd_init()/app_sd_deinit() (sd.h) internally, powering the
+ * card on only for the moment it's actually being read rather than
+ * holding it mounted for the browser's whole lifetime - see sd.h's own
+ * note on this usage pattern. Also registers itself via
+ * app_buttons_set_press_callback() - once this returns 0, button presses
+ * drive the browser directly; don't also install a separate button
+ * callback while it's active.
  *
  * Returns 0 on success, negative errno if the card couldn't be mounted
- * or `root` couldn't be listed (the card is left mounted either way, same
- * as app_sd_init() itself - see sd.h).
+ * or `root` couldn't be listed (the card is left unpowered either way).
  */
 int app_browser_init(const char *root);
 

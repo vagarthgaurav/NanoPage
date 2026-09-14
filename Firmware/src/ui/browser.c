@@ -122,7 +122,23 @@ static int load_dir(const char *path)
 		start = 1;
 	}
 
+	/*
+	 * Brackets the SD card's power/mount for just this one listing -
+	 * see sd.h's own note that a browser navigating folder-to-folder
+	 * should call app_sd_init()/app_sd_deinit() around each listing
+	 * rather than holding one long-lived mount, so the card is powered
+	 * only for the moment it's actually being read (plus whatever a
+	 * display refresh separately needs via display.c's own bracket).
+	 */
+	ret = app_sd_init();
+	if (ret) {
+		return ret;
+	}
+
 	ret = app_sd_list_dir(path, raw_listing, APP_BROWSER_MAX_ENTRIES - start, &raw_count);
+
+	app_sd_deinit();
+
 	if (ret) {
 		return ret;
 	}
@@ -404,12 +420,6 @@ int app_browser_init(const char *root)
 {
 	uint16_t rows;
 	int ret;
-
-	ret = app_sd_init();
-	if (ret) {
-		printk("browser: SD init failed (%d)\n", ret);
-		return ret;
-	}
 
 	app_text_get_grid(&grid_cols, &rows);
 	if (rows < 3) {
