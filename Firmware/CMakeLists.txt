@@ -23,6 +23,7 @@ target_sources(app PRIVATE
 	src/power/fuel_gauge.c
 	src/power/charger.c
 	src/power/power.c
+	src/power/currentlog.c
 	src/storage/sd.c
 	src/book/npb.c
 )

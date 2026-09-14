@@ -3,6 +3,8 @@
 #ifndef APP_FOOTER_H_
 #define APP_FOOTER_H_
 
+#include <stdint.h>
+
 /*
  * Footer: the last row of the current text grid - the row bordering the
  * panel's physical bottom edge. Battery/current status bar (percentage,
@@ -41,5 +43,19 @@ void app_footer_sample_current(void);
  * untouched in that case).
  */
 int app_footer_draw(void);
+
+/* The exact numbers the most recent successful app_footer_draw() rendered -
+ * for a caller (currentlog.c) that wants to log the same reading the
+ * screen shows without a redundant I2C read of its own. Zeroed out until
+ * the first successful draw.
+ */
+struct app_footer_reading {
+	int32_t instant_current_ua;
+	int32_t avg_current_ua;
+	int64_t voltage_uv;
+	uint16_t soc_x10;
+};
+
+void app_footer_get_last(struct app_footer_reading *out);
 
 #endif /* APP_FOOTER_H_ */

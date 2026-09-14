@@ -93,6 +93,20 @@ int app_rtc_format_date(char *buf, size_t len)
 	return 0;
 }
 
+int app_rtc_format_datetime_iso(char *buf, size_t len)
+{
+	struct rtc_time now;
+	int ret = app_rtc_get_time(&now);
+
+	if (ret) {
+		return ret;
+	}
+
+	snprintf(buf, len, "%04d-%02d-%02d %02d:%02d:%02d", now.tm_year + 1900, now.tm_mon + 1,
+		 now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec);
+	return 0;
+}
+
 /*
  * Bridges the driver's rtc_alarm_callback signature to our simpler
  * app_rtc_alarm_cb_t. Runs on the system workqueue (see callback_work_handler

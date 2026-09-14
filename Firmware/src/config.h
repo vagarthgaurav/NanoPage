@@ -33,7 +33,7 @@
  * register - see app_footer_sample_current() in footer.h for why this
  * needs to happen ahead of the draw rather than at draw time.
  */
-#define APP_STATUS_CURRENT_SAMPLE_LEAD_SEC 5
+#define APP_STATUS_CURRENT_SAMPLE_LEAD_SEC 10
 
 /* --- File browser (browser.c) --- */
 

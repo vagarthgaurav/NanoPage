@@ -28,6 +28,14 @@ int app_rtc_format_time(char *buf, size_t len);
  */
 int app_rtc_format_date(char *buf, size_t len);
 
+/* Format the current date/time as "YYYY-MM-DD HH:MM:SS" into buf (needs at
+ * least 20 bytes) - a sortable, machine-parseable timestamp for log files,
+ * as opposed to app_rtc_format_time()/app_rtc_format_date() above which are
+ * shaped for on-screen display. Returns 0 on success, negative errno if the
+ * RTC read failed.
+ */
+int app_rtc_format_datetime_iso(char *buf, size_t len);
+
 /* Alarm callback invoked (from the system workqueue, not ISR context) when the
  * RTC alarm fires. Takes no arguments - look up whatever state you need via
  * app_rtc_get_time() from inside the callback.
