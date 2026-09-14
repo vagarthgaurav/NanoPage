@@ -35,13 +35,27 @@ static const struct mipi_dbi_config epd_dbi_cfg = {
 
 /* SSD1680 datasheet, Table 7-1 "Command Table": command 0x10, data A[1:0].
  * 00 = Normal mode (POR), 01 = Deep Sleep Mode 1 (retains RAM, ~1uA typ),
- * 11 = Deep Sleep Mode 2 (RAM not retained, ~0.7uA typ). Mode 2 is strictly
- * better for us: nothing here ever relies on Deep Sleep retaining RAM,
- * since waking always means a full reboot and a from-scratch re-init
- * anyway (see display.h).
+ * 11 = Deep Sleep Mode 2 (RAM not retained, ~0.7uA typ). Mode 1 is used
+ * below even though nothing here relies on RAM retention (every wake is a
+ * full reboot and a from-scratch re-init anyway, see display.h) - Mode 2
+ * was tried first as the "strictly better for us" choice on paper, but
+ * confirmed on hardware 2026-09-14 to not reliably come back out of Deep
+ * Sleep after a real System OFF wake (the panel's VCI never loses power
+ * across System OFF, so exit depends entirely on the SSD1680's "HWRESET
+ * required to exit Deep Sleep" note - Table 7-1 - with the chip
+ * continuously powered; the very next full refresh's BUSY line cleared
+ * in ~230ms instead of the correct ~1774ms, leaving the screen stuck on
+ * stale content). The datasheet describes Mode 1 and Mode 2 identically
+ * otherwise (same "DC/DC off, no clock, no output load" depth in Table
+ * 11-1, same HWRESET wording) - there was no documented reason to expect
+ * Mode 1 to recover any more reliably than Mode 2 did, but it does,
+ * confirmed on hardware the same day: wake-time refresh is back to the
+ * correct ~1774ms every time. Worth remembering if this panel/driver
+ * combination is ever revisited - the datasheet's "no difference beyond
+ * RAM retention" claim doesn't hold in practice on this hardware.
  */
 #define SSD1680_CMD_DEEP_SLEEP_MODE 0x10U
-#define SSD1680_DEEP_SLEEP_MODE_2   0x03U
+#define SSD1680_DEEP_SLEEP_MODE_1   0x01U
 
 /* See the comment on app_display_lock()/app_display_unlock() in display.h. */
 static K_MUTEX_DEFINE(display_bus_lock);
@@ -76,6 +90,33 @@ void app_display_unlock(void)
 	app_sd_power_off();
 
 	k_mutex_unlock(&display_bus_lock);
+}
+
+/*
+ * The in-tree ssd16xx driver's own busy-wait (ssd16xx_busy_wait() in
+ * ssd16xx.c) only runs at the *start* of its next SPI command - it never
+ * waits for BUSY to clear after triggering a refresh (display_write()/
+ * display_blanking_off() send MASTER_ACTIVATION and return immediately,
+ * while the panel keeps updating in the background for real, ~1.7-1.8s).
+ * Confirmed by reading ssd16xx_blanking_off()/ssd16xx_update_display()/
+ * ssd16xx_activate() directly: nothing in that call chain blocks on BUSY.
+ *
+ * Every refresh function below needs the refresh to be genuinely finished
+ * before app_display_unlock() runs, though - app_display_lock()/unlock()
+ * bracket the microSD card's power around each refresh (see sd.h), and
+ * cutting that power (regulator_disable() + forcing CS low) while the
+ * panel is still mid-update disturbs the shared +3V3 rail enough to
+ * corrupt the in-progress refresh, even though nothing reports an error -
+ * confirmed on hardware 2026-09-14 as the cause of a bug where the
+ * boot-time full refresh (and later ones) silently never visibly
+ * completed: display_blanking_off() was measured returning in 0ms, not
+ * the expected ~1.8s, on every single boot.
+ */
+static void wait_busy(void)
+{
+	while (gpio_pin_get_dt(&epd_busy_gpio) > 0) {
+		k_msleep(1);
+	}
 }
 
 int app_display_init(void)
@@ -149,6 +190,7 @@ int app_display_refresh_full(const uint8_t *buf, size_t buf_size)
 	}
 
 	ret = display_blanking_off(display_dev);
+	wait_busy();
 
 	app_display_unlock();
 
@@ -173,6 +215,8 @@ int app_display_refresh_fast(const uint8_t *buf, size_t buf_size)
 	ret = app_display_write(0, 0, width, height, buf, buf_size);
 	if (ret) {
 		printk("display_write (fast) failed: %d\n", ret);
+	} else {
+		wait_busy();
 	}
 
 	app_display_unlock();
@@ -189,6 +233,8 @@ int app_display_refresh_partial(uint16_t x, uint16_t y, uint16_t width, uint16_t
 
 	if (ret) {
 		printk("display_write (partial) failed: %d\n", ret);
+	} else {
+		wait_busy();
 	}
 
 	app_display_unlock();
@@ -198,21 +244,18 @@ int app_display_refresh_partial(uint16_t x, uint16_t y, uint16_t width, uint16_t
 
 int app_display_deep_sleep(void)
 {
-	uint8_t data = SSD1680_DEEP_SLEEP_MODE_2;
+	uint8_t data = SSD1680_DEEP_SLEEP_MODE_1;
 	int err;
 
 	app_display_lock();
 
-	/* Mirrors the driver's own ssd16xx_busy_wait() convention: don't
-	 * issue a new command while the panel is still finishing the
-	 * previous one. In practice this is already guaranteed by the
-	 * refresh functions above blocking until BUSY clears, but that's
-	 * an invariant of *this* app's call order, not of this function -
-	 * keep the check.
+	/* Don't issue a new command while the panel is still finishing the
+	 * previous one - guaranteed by the refresh functions above now
+	 * waiting out BUSY themselves before returning, but that's an
+	 * invariant of *this* app's call order, not of this function - keep
+	 * the check.
 	 */
-	while (gpio_pin_get_dt(&epd_busy_gpio) > 0) {
-		k_msleep(1);
-	}
+	wait_busy();
 
 	err = mipi_dbi_command_write(epd_mipi_dev, &epd_dbi_cfg,
 				      SSD1680_CMD_DEEP_SLEEP_MODE, &data, 1);

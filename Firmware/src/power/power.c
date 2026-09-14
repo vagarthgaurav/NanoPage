@@ -99,11 +99,17 @@ static void enter_system_off(void)
 	/*
 	 * The EPD panel's VCI is on the always-on 3.3V rail, not gated by
 	 * the nRF52's own power state - left alone, it keeps burning its
-	 * ~20uA post-refresh resting current for the entire System OFF
-	 * duration, dwarfing everything else in this function put
-	 * together. Deep sleep drops that to ~0.7uA. Safe here specifically
-	 * because the next boot's app_display_init() does a fresh hardware
-	 * reset as part of normal init - see the comment on
+	 * ~20-61uA post-refresh resting current for the entire System OFF
+	 * duration. Deep sleep drops that to ~1uA. See display.c's comment
+	 * on SSD1680_DEEP_SLEEP_MODE_1 for why this uses Mode 1, not the
+	 * seemingly-better Mode 2: Mode 2 was tried first (2026-09-14) and
+	 * confirmed on hardware to not reliably recover from a real System
+	 * OFF wake (wake-time full refresh silently corrupted, BUSY
+	 * clearing in ~230ms instead of ~1774ms) despite the datasheet
+	 * describing both modes identically - Mode 1 doesn't have that
+	 * problem, confirmed on hardware the same day. Safe to call here
+	 * specifically because the next boot's app_display_init() does a
+	 * fresh hardware reset as part of normal init - see the comment on
 	 * app_display_deep_sleep() for why this isn't safe to call anywhere
 	 * that doesn't lead to a full reboot.
 	 */
