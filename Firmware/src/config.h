@@ -15,7 +15,7 @@
 /* --- Power (power.c) --- */
 
 /* Idle time (no button press) before the board drops to System OFF. */
-#define APP_POWER_IDLE_TIMEOUT_MS (10 * 60 * 1000)
+#define APP_POWER_IDLE_TIMEOUT_MS (5 * 60 * 1000)
 
 /* --- Status bar (main.c) --- */
 

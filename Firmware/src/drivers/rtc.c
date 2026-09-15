@@ -23,6 +23,24 @@ int app_rtc_init(void)
 	}
 
 	/*
+	 * A System OFF wake is a full reboot, so this runs on every wake too
+	 * - but the PCF85063 keeps ticking through System OFF off its own
+	 * always-on rail, independent of the MCU. Unconditionally reseeding
+	 * here (as this used to) stomped that real, still-correct time back
+	 * to the hardcoded reference below on every wake, which is why the
+	 * clock appeared to reset to 12:00 after sleeping. Zephyr's PCF85063A
+	 * driver returns -ENODATA from rtc_get_time() specifically when the
+	 * chip's own OS (oscillator-stopped) flag is set - genuinely invalid
+	 * time, e.g. true first power-up - so only seed in that case and
+	 * leave an already-ticking clock alone otherwise.
+	 */
+	struct rtc_time now;
+
+	if (rtc_get_time(rtc_dev, &now) != -ENODATA) {
+		return 0;
+	}
+
+	/*
 	 * PCF85063 powers up with no valid time set - seed it once at boot
 	 * to a fixed reference so the ticking is visible during bring-up.
 	 * Replace with a real time source once one exists.

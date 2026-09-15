@@ -13,6 +13,7 @@
 #include "config.h"
 #include "display.h"
 #include "logo_nanopage.h"
+#include "rtc.h"
 #include "sd.h"
 
 /*
@@ -92,6 +93,22 @@ static void enter_system_off(void)
 	       APP_POWER_IDLE_TIMEOUT_MS / 60000);
 
 	show_sleep_message();
+
+	/*
+	 * The PCF85063 keeps ticking through System OFF off its own always-on
+	 * rail, independent of the MCU. main.c arms a once-a-minute alarm on
+	 * it (RTC_ALARM_TIME_MASK_SECOND) whose INT1 line only ever gets
+	 * cleared by the system-workqueue callback in rtc.c - which can't run
+	 * once the MCU is powered off. Left armed, the next per-minute match
+	 * latches INT1 low for the rest of System OFF (open-drain, no MCU
+	 * left to clear AF), and R14's 10k pull-up then sources a continuous
+	 * ~330uA for however long remains - confirmed on a PPK2 capture
+	 * 2026-09-14 as a clean, delayed step from ~25uA to ~326uA with no
+	 * boot-transient shape, well after entering sleep. Disarming here
+	 * avoids that; app_rtc_set_alarm() re-arms it unconditionally on the
+	 * next boot (main.c), since a System OFF wake is a full reboot.
+	 */
+	app_rtc_clear_alarm();
 
 	/*
 	 * The EPD panel's VCI is on the always-on 3.3V rail, not gated by
