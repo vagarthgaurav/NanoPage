@@ -2,15 +2,30 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/display.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/mipi_dbi.h>
+#include <zephyr/pm/device.h>
 #include <zephyr/sys/util.h>
 
 #include "display.h"
 #include "sd.h"
 
 static const struct device *const display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+
+/*
+ * Experimental A/B test (2026-09-17): CONFIG_PM_DEVICE_RUNTIME's automatic
+ * suspend of spi3 never actually released it - SPIM3->ENABLE read back 0,
+ * but current stayed at the same elevated level as if it were still
+ * clocked (see .claude/CLAUDE.md's "PPK2" investigation, which chased this
+ * for two sessions without finding why). A parallel from-scratch firmware
+ * effort dropped CONFIG_PM_DEVICE_RUNTIME entirely and instead calls
+ * pm_device_action_run() explicitly around spi3 usage, and measured idle
+ * current drop from ~930uA to ~14uA. Testing the same fix here before
+ * committing to it.
+ */
+static const struct device *const spi3_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
 
 /*
  * Talks to the panel directly over MIPI DBI for app_display_deep_sleep() -
@@ -64,6 +79,8 @@ void app_display_lock(void)
 {
 	k_mutex_lock(&display_bus_lock, K_FOREVER);
 
+	pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_RESUME);
+
 	/*
 	 * Power the microSD card for the duration of whatever bus activity
 	 * the caller is about to do, per the hardware constraint documented
@@ -88,6 +105,8 @@ void app_display_lock(void)
 void app_display_unlock(void)
 {
 	app_sd_power_off();
+
+	pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_SUSPEND);
 
 	k_mutex_unlock(&display_bus_lock);
 }
