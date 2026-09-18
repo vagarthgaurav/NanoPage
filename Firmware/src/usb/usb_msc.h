@@ -29,15 +29,27 @@
  * (RTC alarm, charger STAT, the footer's periodic tick) - safe to do
  * blocking display/SD work directly from there, same as charger.c/rtc.c.
  *
- * While a host is connected: takes over button input (Prev/Next/Action do
- * nothing - there's no local UI action that makes sense while the host
- * owns the card), draws a "connected" message into the content area
- * (header/footer keep ticking as normal - they don't touch the SD card),
- * and tells power.c to hold off System OFF (cutting SD/display power
- * mid-transfer would corrupt whatever the host was writing). On
- * disconnect, hands the card back and re-opens the file browser at
- * whatever folder was showing before, so anything the host just added,
- * removed, or renamed shows up immediately without a manual refresh.
+ * VBUS_READY only means "5V is present" - true for a dumb USB charger
+ * just as much as a real computer, so it only attaches to the bus
+ * (usbd_enable(), the D+ pull-up) and nothing else. Actually claiming the
+ * card/screen/buttons waits for USBD_MSG_CONFIGURATION with a nonzero
+ * value - a real SET_CONFIGURATION completing, which only a genuine USB
+ * host that has enumerated us can ever send; a charger never speaks USB
+ * at all. This is what keeps a charger-only connection from showing
+ * "Connected to computer" (a real bug, found and fixed 2026-09-18 - the
+ * first version of this file claimed on VBUS_READY directly).
+ *
+ * Once actually connected to a host: takes over button input (Prev/Next/
+ * Action do nothing - there's no local UI action that makes sense while
+ * the host owns the card), draws a "connected" message into the content
+ * area (header/footer keep ticking as normal - they don't touch the SD
+ * card), and tells power.c to hold off System OFF (cutting SD/display
+ * power mid-transfer would corrupt whatever the host was writing). On
+ * disconnect - or a mid-session deconfigure, SET_CONFIGURATION(0), which
+ * is treated the same way - hands the card back and re-opens the file
+ * browser at whatever folder was showing before, so anything the host
+ * just added, removed, or renamed shows up immediately without a manual
+ * refresh.
  */
 
 /*

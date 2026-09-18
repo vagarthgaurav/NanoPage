@@ -121,7 +121,13 @@ static void ignore_button(enum app_button button)
 	 */
 }
 
-static void handle_vbus_ready(void)
+/*
+ * Claims the card/screen/buttons for an actual, enumerated USB Mass
+ * Storage session - see the long comment on USBD_MSG_CONFIGURATION in
+ * usb_msg_cb() below for why this is gated on real enumeration rather
+ * than just VBUS being present.
+ */
+static void claim_session(void)
 {
 	int ret;
 
@@ -139,22 +145,19 @@ static void handle_vbus_ready(void)
 
 	app_buttons_set_press_callback(ignore_button);
 	draw_connected_screen();
-
-	ret = usbd_enable(&nanopage_usbd);
-	if (ret) {
-		printk("usb_msc: usbd_enable failed (%d)\n", ret);
-	}
 }
 
-static void handle_vbus_removed(void)
+/* Reverses claim_session() - also reachable from a mid-connection
+ * deconfigure (SET_CONFIGURATION(0)), not just a real disconnect, so it
+ * doesn't touch usbd_enable()/usbd_disable() itself - see usb_msg_cb().
+ */
+static void release_session(void)
 {
 	int ret;
 
 	if (!msc_active) {
 		return;
 	}
-
-	usbd_disable(&nanopage_usbd);
 
 	app_sd_usb_release();
 	msc_active = false;
@@ -174,6 +177,29 @@ static void handle_vbus_removed(void)
 	}
 }
 
+static void handle_vbus_ready(void)
+{
+	int ret;
+
+	/*
+	 * Only attaches to the bus (D+ pull-up) - does NOT claim the card
+	 * or touch the screen. VBUS is just "5V is present," true for a
+	 * dumb USB charger as much as a real computer - see usb_msg_cb()'s
+	 * USBD_MSG_CONFIGURATION handling for where the actual host-vs-
+	 * charger distinction is made.
+	 */
+	ret = usbd_enable(&nanopage_usbd);
+	if (ret) {
+		printk("usb_msc: usbd_enable failed (%d)\n", ret);
+	}
+}
+
+static void handle_vbus_removed(void)
+{
+	usbd_disable(&nanopage_usbd);
+	release_session();
+}
+
 static void usb_msg_cb(struct usbd_context *const ctx, const struct usbd_msg *const msg)
 {
 	ARG_UNUSED(ctx);
@@ -184,6 +210,31 @@ static void usb_msg_cb(struct usbd_context *const ctx, const struct usbd_msg *co
 		break;
 	case USBD_MSG_VBUS_REMOVED:
 		handle_vbus_removed();
+		break;
+	case USBD_MSG_CONFIGURATION:
+		/*
+		 * Fires only on a real SET_CONFIGURATION request completing -
+		 * i.e. a real USB host finished enumerating us and picked our
+		 * one configuration (msg->status carries the value it chose,
+		 * matching struct usb_setup_packet's wValue - see
+		 * sreq_set_configuration() in usbd_ch9.c). A plain charger
+		 * provides VBUS but never speaks USB at all, so it can never
+		 * reach this - claiming the card/taking over the screen here
+		 * instead of on VBUS_READY is what keeps a charger-only
+		 * connection from showing "Connected to computer" (found
+		 * 2026-09-18: the original VBUS_READY-gated version did
+		 * exactly that, since a charger's VBUS looks identical to a
+		 * real host's at that point in the sequence). wValue == 0 is
+		 * the formal "deconfigure" request (rare with the cable still
+		 * attached, but the host is allowed to do it) - treated the
+		 * same as a disconnect for our purposes, just without the
+		 * usbd_disable() a real VBUS_REMOVED also does.
+		 */
+		if (msg->status != 0) {
+			claim_session();
+		} else {
+			release_session();
+		}
 		break;
 	default:
 		break;
