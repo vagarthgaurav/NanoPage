@@ -442,7 +442,7 @@ int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon)
 		return -EINVAL;
 	}
 
-	if (icon > APP_TEXT_ICON_BATTERY_MAX) {
+	if (icon > font_siji_icons.last_char) {
 		return -EINVAL;
 	}
 

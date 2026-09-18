@@ -13,6 +13,7 @@
 #include "browser.h"
 #include "buttons.h"
 #include "header.h"
+#include "menu.h"
 #include "power.h"
 #include "sd.h"
 #include "text.h"
@@ -105,14 +106,6 @@ static void draw_connected_screen(void)
 	app_text_full_refresh();
 }
 
-static void draw_no_card_screen(void)
-{
-	static const char *const lines[] = {"No SD card found"};
-
-	draw_message(lines, ARRAY_SIZE(lines));
-	app_text_full_refresh();
-}
-
 static void ignore_button(enum app_button button)
 {
 	ARG_UNUSED(button);
@@ -153,8 +146,6 @@ static void claim_session(void)
  */
 static void release_session(void)
 {
-	int ret;
-
 	if (!msc_active) {
 		return;
 	}
@@ -165,15 +156,31 @@ static void release_session(void)
 	app_power_mark_activity();
 
 	/*
-	 * Re-list whatever folder was showing before - the host may have
-	 * added, removed, or renamed files while it had the card, and
-	 * app_browser_init() is safe to call again on an already-
-	 * initialized browser (see its doc comment in browser.h).
+	 * claim_session() never touches browser.c's own state (it just
+	 * swaps the button callback and draws over whatever the browser had
+	 * drawn) - so app_browser_is_ready() still reflects whether the
+	 * browser was the screen actually showing when USB connected, not
+	 * just whether it's ever been opened this boot. If so, re-list
+	 * whatever folder that was (the host may have added, removed, or
+	 * renamed files while it had the card) and resume there. Otherwise
+	 * (the app menu or settings screen was showing instead) return to
+	 * the menu rather than jumping into the file browser unprompted -
+	 * a real simplification for the settings-screen case specifically
+	 * (it's not restored to exactly where it was), accepted since
+	 * nothing there is lost by re-opening it from the menu again.
 	 */
-	ret = app_browser_init(app_browser_get_current_path());
-	if (ret) {
-		printk("usb_msc: browser re-init failed after disconnect (%d)\n", ret);
-		draw_no_card_screen();
+	if (app_browser_is_ready()) {
+		if (app_browser_reinit() != 0) {
+			/* The card that was there before is now unreadable
+			 * (e.g. pulled out while it was mounted over USB) -
+			 * fall back to the menu rather than a dead-end "no
+			 * card" message with no button callback to leave it.
+			 */
+			printk("usb_msc: browser re-init failed after disconnect\n");
+			app_menu_show();
+		}
+	} else {
+		app_menu_show();
 	}
 }
 

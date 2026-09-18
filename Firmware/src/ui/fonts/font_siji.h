@@ -27,6 +27,11 @@
  * plus 9 battery fill levels are exactly the set the old firmware used;
  * the real siji codepoints they came from are documented next to each
  * one in font_siji.c.
+ *
+ * APP_TEXT_ICON_SETTINGS (13) isn't from siji at all - see font_siji.c
+ * for where it actually comes from - but slots into the same contiguous
+ * range/array the same way, just appended after the batch above instead
+ * of interleaved, so none of the siji-sourced indices had to move.
  */
 enum app_text_icon {
 	APP_TEXT_ICON_CURSOR = 0,
@@ -35,6 +40,7 @@ enum app_text_icon {
 	APP_TEXT_ICON_CHARGING = 3,
 	APP_TEXT_ICON_BATTERY_MIN = 4,
 	APP_TEXT_ICON_BATTERY_MAX = 12, /* MIN..MAX = 9 fill levels, empty to full */
+	APP_TEXT_ICON_SETTINGS = 13,
 };
 
 #define APP_TEXT_ICON_BATTERY_LEVELS \

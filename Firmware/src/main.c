@@ -12,14 +12,16 @@
 #include "footer.h"
 #include "fuel_gauge.h"
 #include "header.h"
+#include "menu.h"
 #include "power.h"
 #include "rtc.h"
+#include "settings.h"
 #include "text.h"
 #include "usb_msc.h"
 
 /* app_header_update()'s "folder" argument (header.h) when there's no real
- * browser path to show - the browser failed to mount the SD card at boot,
- * or hasn't been initialized yet.
+ * browser path to show - the browser failed to mount the SD card, or hasn't
+ * been launched from the app menu (menu.h) yet this boot.
  */
 #define HEADER_FOLDER_FALLBACK "(no SD card)"
 
@@ -36,18 +38,30 @@ static struct k_work_delayable footer_draw_work;
  * Registered with both app_rtc_set_alarm() (fires once a minute) and
  * app_charger_set_change_callback() (fires on every STAT transition) -
  * see header.h for exactly what app_header_update() checks before
- * deciding whether there's actually anything new to draw. browser.c also
- * calls app_header_update() directly on every folder navigation, so the
- * folder text doesn't lag behind until the next one of these ticks.
+ * deciding whether there's actually anything new to draw. browser.c/menu.c/
+ * settings.c also call app_header_update() directly on every screen
+ * transition, so the label doesn't lag behind until the next one of these
+ * ticks - this is just the periodic path, and has to pick between the same
+ * mutually-exclusive "what's on screen right now" sources those direct
+ * calls do.
  */
 static void on_header_event(void)
 {
 	app_fuel_gauge_notify_charger_state(app_charger_is_charging());
 
-	const char *folder = app_usb_msc_is_active()
-				      ? "Connected to computer"
-				      : (app_browser_is_ready() ? app_browser_get_current_path()
-								 : HEADER_FOLDER_FALLBACK);
+	const char *folder;
+
+	if (app_usb_msc_is_active()) {
+		folder = "Connected to computer";
+	} else if (app_menu_is_active()) {
+		folder = "Apps";
+	} else if (app_settings_is_active()) {
+		folder = "Settings";
+	} else if (app_browser_is_ready()) {
+		folder = app_browser_get_current_path();
+	} else {
+		folder = HEADER_FOLDER_FALLBACK;
+	}
 
 	if (app_header_update(folder) > 0) {
 		app_text_flush();
@@ -87,7 +101,7 @@ static void footer_sample_handler(struct k_work *work)
 
 int main(void)
 {
-	printk("NanoPage: RTC + buttons + display + fuel gauge + file browser bring-up.\n");
+	printk("NanoPage: RTC + buttons + display + fuel gauge + app menu bring-up.\n");
 
 	if (app_rtc_init()) {
 		return 0;
@@ -106,30 +120,24 @@ int main(void)
 		app_footer_draw();
 
 		/*
-		 * Mounts the SD card and leaves it mounted for as long as the
-		 * browser stays active (see sd.h/browser.h - unlike the old
-		 * one-shot boot-time mount check this replaces, a live file
-		 * browser needs to keep listing directories on demand, not
-		 * just prove the card works once). Draws the initial listing
-		 * plus the header (with the real starting path) and does the
-		 * one full refresh that covers the footer drawn just above
-		 * too - avoids a second, redundant full-panel flash right
-		 * after it. On failure (no card inserted, bad mount), falls
-		 * back to a plain header + full refresh so the footer at
-		 * least isn't left unflushed.
+		 * Boots into the app menu (menu.h) rather than straight into
+		 * the file browser - the browser is now just one of the
+		 * apps listed there, launched (and its SD card mounted) only
+		 * once the user actually selects it. This also covers the
+		 * footer drawn just above with the one full refresh the menu
+		 * does anyway, avoiding a second, redundant full-panel flash
+		 * right after it.
 		 */
-		if (app_browser_init("/") != 0) {
-			printk("main: browser init failed - no SD card?\n");
-			app_header_update(HEADER_FOLDER_FALLBACK);
-			app_text_full_refresh();
-		}
+		app_menu_show();
 
 		/*
 		 * Registers for VBUS notifications but doesn't attach to the
-		 * bus yet (see usb_msc.h) - safe to call regardless of the
-		 * browser init result above, and needs to run after it since
-		 * a USB disconnect later re-enters the browser at whatever
-		 * path app_browser_init() just established.
+		 * bus yet (see usb_msc.h) - safe to call regardless of which
+		 * screen is currently active, and needs to run after
+		 * app_menu_show() since a USB disconnect later re-enters
+		 * whatever browser session app_usb_msc_init()'s eventual
+		 * app_browser_reinit() call expects to already exist (see
+		 * usb_msc.c's release_session()).
 		 */
 		if (app_usb_msc_init()) {
 			printk("main: USB Mass Storage init failed\n");

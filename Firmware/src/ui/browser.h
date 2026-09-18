@@ -17,6 +17,12 @@
  * book reader (which takes over button input until the book is closed,
  * see reader.h). Selecting any other plain file does nothing.
  *
+ * At the SD root ("/"), a synthetic ".." entry (the same one shown at every
+ * other level to go up a directory) instead calls back to whoever launched
+ * the browser (see `on_exit` below) - the file browser is no longer the
+ * top-level screen (see menu.h), so "up" from its own root means leaving it
+ * for the app menu rather than a no-op.
+ *
  * Refresh policy:
  *   - A cursor move that stays on the current page redraws only the two
  *     affected rows (cursor icon erase + redraw) - text.c's app_text_
@@ -56,16 +62,25 @@
  * drive the browser directly; don't also install a separate button
  * callback while it's active.
  *
+ * `on_exit` is called once, from the Action-button handler, when the
+ * synthetic ".." entry at the SD root is selected - the same on_exit
+ * convention reader.h's app_reader_open() uses. May be NULL (e.g. no
+ * caller to return to), in which case that entry is simply not shown and
+ * the SD root is a dead end, same as before this parameter existed.
+ *
  * Returns 0 on success, negative errno if the card couldn't be mounted
  * or `root` couldn't be listed (the card is left unpowered either way).
- *
- * Safe to call again later on an already-initialized browser (usb_msc.c
- * does this on USB disconnect, passing app_browser_get_current_path()
- * back in, to re-list whatever the host may have added/removed/renamed
- * while it had the card) - re-registers the button callback and redraws
- * from a fresh listing, same as the first call.
  */
-int app_browser_init(const char *root);
+int app_browser_init(const char *root, void (*on_exit)(void));
+
+/*
+ * Re-lists whatever directory the browser was last showing, without
+ * changing its registered on_exit callback - for usb_msc.c to call after a
+ * USB disconnect (passing nothing; it wants the browser to resume exactly
+ * where it left off, not to change where "up" from the root now goes).
+ * Same return-value convention as app_browser_init().
+ */
+int app_browser_reinit(void);
 
 /*
  * Whether the most recent app_browser_init() call succeeded - i.e.

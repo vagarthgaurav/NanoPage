@@ -62,6 +62,13 @@ static uint8_t partial_count;
 
 static bool browser_ready;
 
+/* Called when the synthetic ".." entry at the SD root is selected - see
+ * browser.h. Set once by app_browser_init(); app_browser_reinit() (usb_msc.c)
+ * deliberately leaves it untouched, since a USB reconnect resumes the same
+ * browser session rather than starting a fresh one.
+ */
+static void (*exit_cb)(void);
+
 static void on_button(enum app_button button);
 
 /* .bmk files are per-book reader-progress sidecars (reader.c) - purely
@@ -115,7 +122,15 @@ static int load_dir(const char *path)
 
 	entry_count = 0;
 
-	if (strcmp(path, "/") != 0) {
+	/*
+	 * A synthetic ".." entry: goes up a directory everywhere except the
+	 * SD root, where there's nowhere further "up" on the card itself -
+	 * there it instead calls exit_cb (see enter_selected()) to leave the
+	 * browser for whoever launched it. Omitted entirely at the root with
+	 * no exit_cb (e.g. no caller to return to), same as before this
+	 * behavior existed.
+	 */
+	if (strcmp(path, "/") != 0 || exit_cb != NULL) {
 		strncpy(entries[0].name, "..", sizeof(entries[0].name) - 1);
 		entries[0].name[sizeof(entries[0].name) - 1] = '\0';
 		entries[0].is_dir = true;
@@ -354,6 +369,25 @@ static void enter_selected(void)
 	}
 
 	if (entries[selected_index].is_parent) {
+		if (strcmp(current_path, "/") == 0) {
+			/* Nowhere further "up" on the card itself - hand
+			 * control back to whoever launched the browser
+			 * instead. Same shutdown shape as reader.c's
+			 * close_reader(): stop taking button input and mark
+			 * ourselves not-ready before calling out, in case the
+			 * callback (or whatever it does) checks either.
+			 */
+			void (*cb)(void) = exit_cb;
+
+			app_buttons_set_press_callback(NULL);
+			browser_ready = false;
+
+			if (cb) {
+				cb();
+			}
+			return;
+		}
+
 		char *slash = strrchr(current_path, '/');
 
 		if (slash == NULL || slash == current_path) {
@@ -418,7 +452,11 @@ static void on_button(enum app_button button)
 	}
 }
 
-int app_browser_init(const char *root)
+/* Shared by app_browser_init()/app_browser_reinit() - see browser.h for why
+ * exit_cb isn't touched here (it's the one thing that differs between the
+ * two callers).
+ */
+static int browser_open(const char *root)
 {
 	uint16_t rows;
 	int ret;
@@ -461,6 +499,18 @@ int app_browser_init(const char *root)
 	browser_ready = true;
 
 	return 0;
+}
+
+int app_browser_init(const char *root, void (*on_exit)(void))
+{
+	exit_cb = on_exit;
+
+	return browser_open(root);
+}
+
+int app_browser_reinit(void)
+{
+	return browser_open(current_path);
 }
 
 bool app_browser_is_ready(void)

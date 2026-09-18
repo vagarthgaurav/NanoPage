@@ -13,8 +13,25 @@
  *   4  APP_TEXT_ICON_BATTERY_MIN siji 0xe24c (empty)
  *   5..11                        siji 0xe24d..0xe253
  *   12 APP_TEXT_ICON_BATTERY_MAX siji 0xe254 (full)
+ *   13 APP_TEXT_ICON_SETTINGS    not siji - see below
  */
-/* Generated from siji.bdf (stark/siji, MIT) - 13 hand-picked icon glyphs (cursor/folder/file/charging/9 battery levels), remapped to a contiguous local range 0..12 (real siji codepoints are scattered Unicode Private Use Area values - see the enum in font_siji.h for the mapping). 12x16px each (native 12x12, bottom-padded to a multiple of 8), CFB_FONT_MONO_VPACKED (24 bytes/glyph, 312 bytes total). */
+/* Generated from siji.bdf (stark/siji, MIT) - 13 hand-picked icon glyphs (cursor/folder/file/charging/9 battery levels), remapped to a contiguous local range 0..12 (real siji codepoints are scattered Unicode Private Use Area values - see the enum in font_siji.h for the mapping). 12x16px each (native 12x12, bottom-padded to a multiple of 8), CFB_FONT_MONO_VPACKED (24 bytes/glyph). */
+/*
+ * Glyph 13 (APP_TEXT_ICON_SETTINGS) isn't from siji - the app menu (menu.c)
+ * needed a settings icon siji doesn't have. A gear (both a straight
+ * downsample of the user-supplied Pictures/settings.png and a hand-tuned
+ * geometric redraw) and a hand-drawn wrench were both tried and rejected
+ * on review. Settled on the "sliders/tune" glyph the user pointed at
+ * directly instead (three vertical lines, each crossed by a small
+ * horizontal knob at a different height - the same icon Feather/Material/
+ * Bootstrap's icon sets all ship as "sliders"/"tune"/"filter"): three
+ * full-height 1px verticals at even-ish spacing (x=1,5,10, chosen so each
+ * knob's width stays clear of its neighbors), each with a 3x2px knob
+ * centered on it at a different y. Verified by rendering the generated
+ * bytes back with this exact bit convention and comparing side-by-side
+ * against the folder glyph above before ever touching this file, same
+ * round-trip discipline as every other font in this project.
+ */
 static const uint8_t cfb_font_siji_icons[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x07, 0xe0, 0x03, 0xc0, 0x01, 0x80, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x07, 0xf8, 0x07, 0xf8, 0x07,
@@ -36,6 +53,9 @@ static const uint8_t cfb_font_siji_icons[] = {
 	0xf0, 0x07, 0xf0, 0x07, 0xf0, 0x07, 0xf0, 0x07, 0xf0, 0x07, 0x10, 0x04, 0x30, 0x06, 0xe0, 0x03,
 	0xf0, 0x07, 0xf0, 0x07, 0xf0, 0x07, 0xf0, 0x07, 0xf0, 0x07, 0xf0, 0x07, 0xf0, 0x07, 0xf0, 0x07,
 	0xf0, 0x07, 0xf0, 0x07, 0x30, 0x06, 0xe0, 0x03,
+	/* 13: APP_TEXT_ICON_SETTINGS - see the doc comment above */
+	0x0c, 0x00, 0xff, 0x0f, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x03, 0xff, 0x0f,
+	0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x60, 0x00, 0xff, 0x0f, 0x60, 0x00,
 };
 
 /*
@@ -51,5 +71,5 @@ const struct cfb_font font_siji_icons = {
 	.width = 12,
 	.height = 16,
 	.first_char = 0,
-	.last_char = APP_TEXT_ICON_BATTERY_MAX,
+	.last_char = APP_TEXT_ICON_SETTINGS,
 };
