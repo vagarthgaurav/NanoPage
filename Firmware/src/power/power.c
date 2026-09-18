@@ -44,6 +44,7 @@ static const struct gpio_dt_spec wake_buttons[] = {
 static struct k_work_delayable idle_work;
 static bool woke_from_system_off;
 static bool sleep_inhibited;
+static void (*idle_hook)(void);
 
 static void idle_work_handler(struct k_work *work);
 
@@ -112,6 +113,16 @@ static void enter_system_off(void)
 {
 	printk("power: %d minutes idle, entering System OFF (wake on any button)\n",
 	       APP_POWER_IDLE_TIMEOUT_MS / 60000);
+
+	/*
+	 * Give whatever screen registered app_power_set_idle_hook() a chance
+	 * to flush any state it hasn't already persisted, before the SD
+	 * card/display below are touched at all - see that function's own
+	 * doc comment.
+	 */
+	if (idle_hook) {
+		idle_hook();
+	}
 
 	show_sleep_message();
 
@@ -194,4 +205,14 @@ void app_power_set_sleep_inhibited(bool inhibited)
 	if (inhibited) {
 		k_work_cancel_delayable(&idle_work);
 	}
+}
+
+void app_power_set_idle_hook(void (*cb)(void))
+{
+	idle_hook = cb;
+}
+
+bool app_power_woke_from_system_off(void)
+{
+	return woke_from_system_off;
 }

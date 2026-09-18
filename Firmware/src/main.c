@@ -141,10 +141,21 @@ int main(void)
 		 * apps listed there, launched (and its SD card mounted) only
 		 * once the user actually selects it. This also covers the
 		 * footer drawn just above with the one full refresh the menu
-		 * does anyway, avoiding a second, redundant full-panel flash
-		 * right after it.
+		 * (or, below, the reader) does anyway, avoiding a second,
+		 * redundant full-panel flash right after it.
+		 *
+		 * Exception: a System-OFF wake (app_power_woke_from_system_
+		 * off()) with a reader session marker on the SD card - see
+		 * app_reader_resume_last_session()'s own doc comment - goes
+		 * straight back into that book instead, since the idle timer
+		 * put the board to sleep mid-read, not mid-browsing. Falls
+		 * through to the app menu, same as a cold boot, if there's no
+		 * marker, no SD card, or the book itself fails to reopen.
 		 */
-		app_menu_show();
+		if (!app_power_woke_from_system_off() ||
+		    app_reader_resume_last_session(app_menu_show) != 0) {
+			app_menu_show();
+		}
 
 		/*
 		 * Registers for VBUS notifications but doesn't attach to the

@@ -22,6 +22,19 @@
 void app_power_init(void);
 
 /*
+ * Whether this boot followed a real System OFF wake (a button press, per
+ * the GPIO SENSE wake sources armed in enter_system_off()) rather than the
+ * reset button or a fresh flash - see print_and_clear_reset_cause() in
+ * power.c for how this is determined from RESETREAS. main.c uses this to
+ * decide whether to try resuming whatever reader session was open when the
+ * idle timer triggered that System OFF (app_reader_resume_last_session())
+ * instead of booting to the app menu as normal - a plain reset/reflash
+ * always boots to the menu, even if a stale resume marker is sitting on
+ * the SD card from an earlier session.
+ */
+bool app_power_woke_from_system_off(void);
+
+/*
  * Call from any user-input event handler (button press, USB MSC session
  * end) to push the idle deadline out another APP_POWER_IDLE_TIMEOUT_MS.
  * Implemented as a k_work_delayable reschedule rather than a timestamp
@@ -46,5 +59,23 @@ void app_power_mark_activity(void);
  * rather than picking up wherever it left off before the inhibit began.
  */
 void app_power_set_sleep_inhibited(bool inhibited);
+
+/*
+ * Registers a callback that enter_system_off() (power.c) invokes right
+ * before it touches the SD card/display, so a screen with state that's
+ * only persisted lazily gets one last chance to flush it before an
+ * idle-triggered System OFF discards it along with the rest of RAM -
+ * reader.c is the current user (app_reader_set_font() doesn't save the
+ * new font choice until the next page turn/bookmark toggle; sitting idle
+ * right after a font change would otherwise silently revert it on the
+ * next boot). power.c is a low-level subsystem with no business including
+ * a UI screen's header directly - this indirection is what keeps it that
+ * way, same reasoning as reader.c/reader_menu.c threading `exit_cb`
+ * function pointers between screens instead of calling each other
+ * directly. NULL clears it; a single slot is enough since reader.c is the
+ * only screen that currently needs this - revisit if a second one ever
+ * does.
+ */
+void app_power_set_idle_hook(void (*cb)(void));
 
 #endif

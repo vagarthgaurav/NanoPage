@@ -81,6 +81,21 @@
  */
 int app_reader_open(const char *path, void (*on_exit)(void));
 
+/*
+ * main.c's boot-time hook: after a System-OFF wake, tries to reopen
+ * whatever book was open when the idle timer last put the board to sleep,
+ * instead of booting to the app menu as normal - see reader.c's session
+ * marker doc comment (on flush_pending_state()) for how that's tracked.
+ * `on_exit` is threaded straight through to app_reader_open() - same
+ * convention, since as far as reader.c is concerned this is just that
+ * call with the path supplied from the marker file instead of a caller.
+ *
+ * Returns 0 if a session was found and successfully reopened, a negative
+ * errno otherwise (no marker, no SD card, or the book itself failed to
+ * open) - main.c is expected to fall back to app_menu_show() in that case.
+ */
+int app_reader_resume_last_session(void (*on_exit)(void));
+
 /* The font book content currently renders in - for a future settings menu
  * to read back and highlight the active choice.
  */

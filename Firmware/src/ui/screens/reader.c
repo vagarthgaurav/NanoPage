@@ -10,6 +10,7 @@
 #include "header.h"
 #include "npb.h"
 #include "npb_bookmark_format.h"
+#include "power.h"
 #include "reader.h"
 #include "reader_menu.h"
 #include "sd.h"
@@ -47,6 +48,13 @@
 
 static struct npb_book book;
 static char full_path_buf[APP_SD_MAX_PATH_LEN];
+/* The SD-root-relative path app_reader_open() was actually called with
+ * (e.g. "/books/foo.npb") - unlike full_path_buf above (the mount-prefixed
+ * form fs_open() etc. need), this is what gets persisted to the session
+ * marker (see flush_pending_state()/app_reader_resume_last_session()
+ * below), since that's the same form app_reader_open() itself expects back.
+ */
+static char session_path_buf[APP_SD_MAX_PATH_LEN];
 /* Mount-prefixed path of the sidecar's containing hidden folder (e.g.
  * "/SD:/books/.nanopage") - built alongside bmk_path below so
  * app_reader_open() can fs_mkdir() it before the first save.
@@ -268,6 +276,106 @@ static void save_bookmark(void)
 }
 
 /*
+ * SD-root-relative folder + fixed filename for the "resume this on the next
+ * boot" marker - lives in the SD root's own ".nanopage" folder (the same
+ * hidden-folder convention build_bmk_paths() uses per-book-directory, just
+ * rooted at "/" instead of a book's own directory), NOT the per-book
+ * bookmark sidecar's globals (bmk_dir_buf/bmk_path) - reusing those here
+ * would clobber the currently-open book's own bookmark path out from under
+ * save_bookmark(). "session" can't collide with a real bookmark sidecar's
+ * name, which is always "<book filename>.bmk" (build_bmk_paths()).
+ */
+#define APP_READER_SESSION_DIR_REL "/" APP_READER_BMK_DIR
+#define APP_READER_SESSION_FILE_NAME "session"
+
+/*
+ * Resolves the mount-prefixed path of the session marker file into `out` -
+ * shared by flush_pending_state() and app_reader_resume_last_session().
+ * `create_dir` additionally fs_mkdir()s the containing ".nanopage" folder
+ * first (best-effort, same as app_reader_open()'s identical call for a
+ * book's own bookmark folder) - needed before writing the marker, since
+ * nothing may have created it yet if no book at the SD root itself has
+ * ever been bookmarked; skipped when only reading, since a missing folder
+ * there just means fs_open() below fails with nothing to resume, the same
+ * as a missing file would. Requires the card to already be mounted, same
+ * as app_sd_full_path().
+ */
+static int session_marker_path(char *out, size_t out_size, bool create_dir)
+{
+	char dir[APP_SD_MAX_PATH_LEN + sizeof(APP_READER_BMK_DIR) + 4];
+	int ret;
+
+	ret = app_sd_full_path(APP_READER_SESSION_DIR_REL, dir, sizeof(dir));
+	if (ret) {
+		return ret;
+	}
+
+	if (create_dir) {
+		ret = fs_mkdir(dir);
+		if (ret && ret != -EEXIST) {
+			return ret;
+		}
+	}
+
+	ret = snprintf(out, out_size, "%s/" APP_READER_SESSION_FILE_NAME, dir);
+	return (ret < 0 || (size_t)ret >= out_size) ? -ENAMETOOLONG : 0;
+}
+
+/*
+ * Registered with power.c as its idle hook (app_power_set_idle_hook()) for
+ * as long as a book is open - see that function's own doc comment for why
+ * this indirection exists instead of power.c calling into this file
+ * directly. Two independent jobs, both about not losing state to an
+ * idle-triggered System OFF, which is the only thing that ever calls this
+ * (idle_work is power.c's sole caller of enter_system_off()) - so this is
+ * also the one place that needs to keep the session marker below in sync,
+ * nothing else has to touch it:
+ *
+ *   1. save_bookmark() - every reader mutation that changes bmk_state
+ *      already calls this itself before returning (turn_page(),
+ *      toggle_bookmark(), app_reader_jump_to_offset()) except
+ *      app_reader_set_font(), which only picks up book.font_id on the
+ *      *next* save (see its own doc comment) - this is the safety net for
+ *      that (and any future case like it).
+ *
+ *   2. the session marker (session_marker_path() above) - written with
+ *      the currently-open book's path if book_open, or removed if not, so
+ *      app_reader_resume_last_session() (called from main.c after a
+ *      System-OFF wake) knows whether - and what - to reopen instead of
+ *      booting to the app menu. Removed rather than left stale when no
+ *      book is open, so closing the reader (close_reader()) and then
+ *      idling out doesn't incorrectly resume the book the user already
+ *      walked away from.
+ */
+static void flush_pending_state(void)
+{
+	char path[APP_SD_MAX_PATH_LEN + sizeof(APP_READER_BMK_DIR) + 24];
+
+	if (app_sd_init()) {
+		printk("reader: SD unavailable, pending state not flushed before sleep\n");
+		return;
+	}
+
+	if (book_open) {
+		save_bookmark();
+
+		if (session_marker_path(path, sizeof(path), true) == 0) {
+			struct fs_file_t f;
+
+			fs_file_t_init(&f);
+			if (fs_open(&f, path, FS_O_CREATE | FS_O_WRITE | FS_O_TRUNC) == 0) {
+				fs_write(&f, session_path_buf, strlen(session_path_buf));
+				fs_close(&f);
+			}
+		}
+	} else if (session_marker_path(path, sizeof(path), false) == 0) {
+		fs_unlink(path);
+	}
+
+	app_sd_deinit();
+}
+
+/*
  * Loads the sidecar (if any) into bmk_state wholesale - both the
  * auto-resume position (resolved to a starting row via npb_find_row(),
  * book-format.md's binary-search primitive) and every explicit bookmark,
@@ -449,6 +557,7 @@ static void close_reader(void)
 	app_buttons_set_press_callback(NULL);
 	app_buttons_set_long_press_callback(NULL);
 	app_buttons_set_combo_callback(NULL);
+	app_power_set_idle_hook(NULL);
 
 	if (cb) {
 		cb();
@@ -640,6 +749,15 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 {
 	int ret;
 
+	/* Copied immediately, not just referenced - `path` is often a
+	 * caller's own stack buffer (e.g. browser.c's enter_selected()) that
+	 * won't outlive this call, but flush_pending_state() needs it to
+	 * still be valid for as long as the book stays open (see
+	 * session_path_buf's own doc comment above).
+	 */
+	strncpy(session_path_buf, path, sizeof(session_path_buf) - 1);
+	session_path_buf[sizeof(session_path_buf) - 1] = '\0';
+
 	/*
 	 * One app_sd_init()/app_sd_deinit() bracket for the whole open
 	 * sequence (resolve path, parse header/variant table, read the
@@ -708,8 +826,65 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 	app_buttons_set_press_callback(on_button);
 	app_buttons_set_long_press_callback(open_reader_menu);
 	app_buttons_set_combo_callback(toggle_bookmark);
+	app_power_set_idle_hook(flush_pending_state);
 
 	return 0;
+}
+
+/*
+ * main.c's boot-time hook, called once after a System-OFF wake
+ * (app_power_woke_from_system_off()) - reads the session marker
+ * flush_pending_state() leaves behind and, if one names a book, reopens it
+ * exactly like a normal app_reader_open() call (`on_exit` is threaded
+ * straight through, same convention). Returns 0 if a session was found and
+ * successfully reopened; a negative errno otherwise (no marker, no SD
+ * card, or the book itself failed to open) - the caller is expected to
+ * fall back to app_menu_show() in that case, same as a cold boot.
+ *
+ * Deliberately its own short app_sd_init()/app_sd_deinit() bracket just to
+ * read the marker, released *before* calling app_reader_open() rather than
+ * held across it - app_sd_init() isn't safe to call again while already
+ * mounted (see sd.h), so nesting the two brackets isn't an option here the
+ * way it is for a single fs_open()/fs_read() pair elsewhere in this file.
+ */
+int app_reader_resume_last_session(void (*on_exit)(void))
+{
+	char path[APP_SD_MAX_PATH_LEN + sizeof(APP_READER_BMK_DIR) + 24];
+	char saved_path[APP_SD_MAX_PATH_LEN];
+	struct fs_file_t f;
+	int ret;
+	int n;
+
+	ret = app_sd_init();
+	if (ret) {
+		return ret;
+	}
+
+	ret = session_marker_path(path, sizeof(path), false);
+	if (ret) {
+		app_sd_deinit();
+		return ret;
+	}
+
+	fs_file_t_init(&f);
+	ret = fs_open(&f, path, FS_O_READ);
+	if (ret) {
+		app_sd_deinit();
+		return ret;
+	}
+
+	n = fs_read(&f, saved_path, sizeof(saved_path) - 1);
+	fs_close(&f);
+	app_sd_deinit();
+
+	if (n <= 0) {
+		return -ENOENT;
+	}
+	saved_path[n] = '\0';
+
+	printk("reader: resuming last session at \"%s\"\n", saved_path);
+
+	return app_reader_open(saved_path, on_exit);
 }
 
 enum app_text_font app_reader_get_font(void)
@@ -810,6 +985,7 @@ void app_reader_set_font(enum app_text_font font)
 			app_buttons_set_press_callback(NULL);
 			app_buttons_set_long_press_callback(NULL);
 			app_buttons_set_combo_callback(NULL);
+			app_power_set_idle_hook(NULL);
 			app_sd_deinit();
 			return;
 		}
