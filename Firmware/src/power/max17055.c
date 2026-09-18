@@ -24,6 +24,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
 
+#include "i2c1_bus.h"
 #include "max17055.h"
 
 /* Register map (word registers, little-endian on the wire). */
@@ -165,7 +166,11 @@ static uint16_t reg_to_percent_x10(uint16_t raw)
 int max17055_check_por(const struct device *dev, bool *por)
 {
 	uint16_t status;
-	int ret = reg_read(dev, REG_STATUS, &status);
+	int ret;
+
+	app_i2c1_lock();
+	ret = reg_read(dev, REG_STATUS, &status);
+	app_i2c1_unlock();
 
 	if (ret) {
 		return ret;
@@ -178,13 +183,20 @@ int max17055_check_por(const struct device *dev, bool *por)
 int max17055_clear_por(const struct device *dev)
 {
 	uint16_t status;
-	int ret = reg_read(dev, REG_STATUS, &status);
+	int ret;
 
+	app_i2c1_lock();
+
+	ret = reg_read(dev, REG_STATUS, &status);
 	if (ret) {
+		app_i2c1_unlock();
 		return ret;
 	}
 
-	return reg_write_verify(dev, REG_STATUS, status & ~STATUS_POR);
+	ret = reg_write_verify(dev, REG_STATUS, status & ~STATUS_POR);
+	app_i2c1_unlock();
+
+	return ret;
 }
 
 int max17055_configure(const struct device *dev, const struct max17055_learned_params *learned)
@@ -195,11 +207,13 @@ int max17055_configure(const struct device *dev, const struct max17055_learned_p
 	uint16_t vempty_reg = ((cfg->vempty_mv / 10) << 7) | ((cfg->vrecover_mv / 40) & 0x7F);
 	int ret;
 
+	app_i2c1_lock();
+
 	/* Step 2: wait for FSTAT.DNR to clear (chip finishing its own startup). */
 	do {
 		ret = reg_read(dev, REG_FSTAT, &fstat);
 		if (ret) {
-			return ret;
+			goto unlock;
 		}
 		if (fstat & FSTAT_DNR) {
 			k_sleep(K_MSEC(10));
@@ -209,19 +223,19 @@ int max17055_configure(const struct device *dev, const struct max17055_learned_p
 	/* Step 3: exit hibernate (save/restore HibCfg around it). */
 	ret = reg_read(dev, REG_HIBCFG, &hib_cfg);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write(dev, REG_COMMAND, 0x0090);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write(dev, REG_HIBCFG, 0x0000);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write(dev, REG_COMMAND, 0x0000);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 
 	/*
@@ -234,29 +248,29 @@ int max17055_configure(const struct device *dev, const struct max17055_learned_p
 
 	ret = reg_read(dev, REG_CONFIG, &config_reg);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write(dev, REG_CONFIG, config_reg & ~CONFIG_ETHRM);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 
 	/* Option 2: Custom Short INI without OCV table. */
 	ret = reg_write(dev, REG_DESIGNCAP, design_cap_reg);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write(dev, REG_DQACC, design_cap_reg / 16);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write(dev, REG_ICHGTERM, ma_to_reg(cfg, cfg->ichg_term_ma));
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write(dev, REG_VEMPTY, vempty_reg);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 
 	if (cfg->design_voltage_mv > 4275) {
@@ -268,18 +282,18 @@ int max17055_configure(const struct device *dev, const struct max17055_learned_p
 	}
 	ret = reg_write(dev, REG_DPACC, dpacc);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write(dev, REG_MODELCFG, model_cfg);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 
 	/* Poll ModelCfg.Refresh until the chip finishes loading the model. */
 	do {
 		ret = reg_read(dev, REG_MODELCFG, &model_cfg);
 		if (ret) {
-			return ret;
+			goto unlock;
 		}
 		if (model_cfg & MODELCFG_REFRESH) {
 			k_sleep(K_MSEC(10));
@@ -289,15 +303,19 @@ int max17055_configure(const struct device *dev, const struct max17055_learned_p
 	if (learned) {
 		ret = reg_write(dev, REG_RCOMP0, learned->rcomp0);
 		if (ret) {
-			return ret;
+			goto unlock;
 		}
 		ret = reg_write(dev, REG_TEMPCO, learned->tempco);
 		if (ret) {
-			return ret;
+			goto unlock;
 		}
 	}
 
-	return reg_write(dev, REG_HIBCFG, hib_cfg);
+	ret = reg_write(dev, REG_HIBCFG, hib_cfg);
+
+unlock:
+	app_i2c1_unlock();
+	return ret;
 }
 
 int max17055_restore_capacity(const struct device *dev,
@@ -310,10 +328,12 @@ int max17055_restore_capacity(const struct device *dev,
 		return -EINVAL;
 	}
 
+	app_i2c1_lock();
+
 	/* 4.6: restore FullCapNom (RCOMP0/TempCo already set by max17055_configure()). */
 	ret = reg_write_verify(dev, REG_FULLCAPNOM, learned->full_cap_nom);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 
 	k_sleep(K_MSEC(350)); /* 4.7 */
@@ -321,42 +341,50 @@ int max17055_restore_capacity(const struct device *dev,
 	/* 4.8: restore FullCap. */
 	ret = reg_read(dev, REG_FULLCAPNOM, &full_cap_nom);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_read(dev, REG_MIXSOC, &mix_soc);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	mix_cap = (uint32_t)mix_soc * full_cap_nom / 25600;
 
 	ret = reg_write_verify(dev, REG_MIXCAP, mix_cap);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write_verify(dev, REG_FULLCAPREP, learned->full_cap_rep);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write_verify(dev, REG_DPACC, 0x0C80);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_write_verify(dev, REG_DQACC, learned->full_cap_nom / 16);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 
 	k_sleep(K_MSEC(350)); /* 4.10 */
 
-	return reg_write_verify(dev, REG_CYCLES, learned->cycles); /* 4.11 */
+	ret = reg_write_verify(dev, REG_CYCLES, learned->cycles); /* 4.11 */
+
+unlock:
+	app_i2c1_unlock();
+	return ret;
 }
 
 int max17055_force_full(const struct device *dev)
 {
 	uint16_t rep_cap;
-	int ret = reg_read(dev, REG_REPCAP, &rep_cap);
+	int ret;
 
+	app_i2c1_lock();
+
+	ret = reg_read(dev, REG_REPCAP, &rep_cap);
 	if (ret) {
+		app_i2c1_unlock();
 		return ret;
 	}
 
@@ -369,30 +397,39 @@ int max17055_force_full(const struct device *dev)
 	 * the caller (fuel_gauge.c's app_fuel_gauge_notify_charger_state())
 	 * for why that automatic path can't be relied on here.
 	 */
-	return reg_write_verify(dev, REG_FULLCAPREP, rep_cap);
+	ret = reg_write_verify(dev, REG_FULLCAPREP, rep_cap);
+	app_i2c1_unlock();
+
+	return ret;
 }
 
 int max17055_read_learned_params(const struct device *dev, struct max17055_learned_params *out)
 {
 	int ret;
 
+	app_i2c1_lock();
+
 	ret = reg_read(dev, REG_RCOMP0, &out->rcomp0);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_read(dev, REG_TEMPCO, &out->tempco);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_read(dev, REG_FULLCAPREP, &out->full_cap_rep);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
 	ret = reg_read(dev, REG_FULLCAPNOM, &out->full_cap_nom);
 	if (ret) {
-		return ret;
+		goto unlock;
 	}
-	return reg_read(dev, REG_CYCLES, &out->cycles);
+	ret = reg_read(dev, REG_CYCLES, &out->cycles);
+
+unlock:
+	app_i2c1_unlock();
+	return ret;
 }
 
 int max17055_read_all(const struct device *dev, struct max17055_data_snapshot *out)
@@ -405,10 +442,13 @@ int max17055_read_all(const struct device *dev, struct max17055_data_snapshot *o
 	do {                                                                                       \
 		ret = reg_read(dev, (reg_addr), &raw);                                            \
 		if (ret) {                                                                        \
+			app_i2c1_unlock();                                                        \
 			return ret;                                                               \
 		}                                                                                 \
 		(dest);                                                                           \
 	} while (0)
+
+	app_i2c1_lock();
 
 	READ(REG_VCELL, out->voltage_uv = reg_to_voltage_uv(raw));
 	READ(REG_AVGVCELL, out->avg_voltage_uv = reg_to_voltage_uv(raw));
@@ -430,6 +470,7 @@ int max17055_read_all(const struct device *dev, struct max17055_data_snapshot *o
 
 #undef READ
 
+	app_i2c1_unlock();
 	return 0;
 }
 

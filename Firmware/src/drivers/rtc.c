@@ -5,6 +5,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/rtc.h>
 
+#include "i2c1_bus.h"
 #include "rtc.h"
 
 static const struct device *const rtc_dev = DEVICE_DT_GET(DT_ALIAS(rtc0));
@@ -35,8 +36,12 @@ int app_rtc_init(void)
 	 * leave an already-ticking clock alone otherwise.
 	 */
 	struct rtc_time now;
+	int ret;
 
-	if (rtc_get_time(rtc_dev, &now) != -ENODATA) {
+	app_i2c1_lock();
+	ret = rtc_get_time(rtc_dev, &now);
+	if (ret != -ENODATA) {
+		app_i2c1_unlock();
 		return 0;
 	}
 
@@ -55,7 +60,8 @@ int app_rtc_init(void)
 		.tm_wday = 4, /* 2026-09-10 is a Thursday */
 	};
 
-	int ret = rtc_set_time(rtc_dev, &set_time);
+	ret = rtc_set_time(rtc_dev, &set_time);
+	app_i2c1_unlock();
 
 	if (ret) {
 		printk("rtc_set_time failed: %d\n", ret);
@@ -66,7 +72,13 @@ int app_rtc_init(void)
 
 int app_rtc_get_time(struct rtc_time *now)
 {
-	return rtc_get_time(rtc_dev, now);
+	int ret;
+
+	app_i2c1_lock();
+	ret = rtc_get_time(rtc_dev, now);
+	app_i2c1_unlock();
+
+	return ret;
 }
 
 void app_rtc_log_time(void)
@@ -144,7 +156,9 @@ static void alarm_trampoline(const struct device *dev, uint16_t id, void *user_d
 	 * the callback would never fire again. rtc_alarm_is_pending() both
 	 * reports and clears AF - call it every time to re-arm the line.
 	 */
+	app_i2c1_lock();
 	rtc_alarm_is_pending(rtc_dev, 0);
+	app_i2c1_unlock();
 
 	if (alarm_user_cb) {
 		alarm_user_cb();
@@ -157,13 +171,18 @@ int app_rtc_set_alarm(const struct rtc_time *time, uint16_t mask, app_rtc_alarm_
 
 	alarm_user_cb = cb;
 
+	app_i2c1_lock();
+
 	ret = rtc_alarm_set_time(rtc_dev, 0, mask, time);
 	if (ret) {
+		app_i2c1_unlock();
 		printk("rtc_alarm_set_time failed: %d\n", ret);
 		return ret;
 	}
 
 	ret = rtc_alarm_set_callback(rtc_dev, 0, alarm_trampoline, NULL);
+	app_i2c1_unlock();
+
 	if (ret) {
 		printk("rtc_alarm_set_callback failed: %d\n", ret);
 		return ret;
@@ -186,9 +205,14 @@ int app_rtc_set_daily_alarm(uint8_t hour, uint8_t min, app_rtc_alarm_cb_t cb)
 int app_rtc_clear_alarm(void)
 {
 	struct rtc_time none = {0};
+	int ret;
 
 	alarm_user_cb = NULL;
 
 	/* mask = 0 disables every alarm field, so it can never match again. */
-	return rtc_alarm_set_time(rtc_dev, 0, 0, &none);
+	app_i2c1_lock();
+	ret = rtc_alarm_set_time(rtc_dev, 0, 0, &none);
+	app_i2c1_unlock();
+
+	return ret;
 }
