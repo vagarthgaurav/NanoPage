@@ -3,6 +3,7 @@ board := "nanopage"
 firmware_dir := justfile_directory() / "Firmware"
 build_dir := firmware_dir / "build"
 converter_dir := justfile_directory() / "Converter"
+rtt_port := "9090"
 
 # Incremental build
 build:
@@ -32,18 +33,15 @@ flash: build
 rtt:
     #!/usr/bin/env bash
     set -euo pipefail
-    pkill -f "openocd.*cmsis-dap" 2>/dev/null || true
-    sleep 0.5
     openocd -f interface/cmsis-dap.cfg -f target/nrf52.cfg \
-        -c "init" -c "reset init" \
-        -c "rtt setup 0x20000000 0x10000 \"SEGGER RTT\"" \
+        -c "init" \
+        -c "rtt setup 0x20000000 0x40000 \"SEGGER RTT\"" \
         -c "rtt start" \
-        -c "rtt server start 9090 0" \
-        -c "resume" > /tmp/nanopage-openocd-rtt.log 2>&1 &
-    openocd_pid=$!
-    trap 'kill "$openocd_pid" 2>/dev/null' EXIT
-    sleep 2
-    nc localhost 9090
+        -c "rtt server start {{rtt_port}} 0" &
+    pid=$!
+    trap 'kill $pid 2>/dev/null' EXIT
+    sleep 1
+    nc localhost {{rtt_port}}
 
 # Remove build output
 clean:
