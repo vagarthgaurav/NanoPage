@@ -15,6 +15,7 @@
 #include "power.h"
 #include "rtc.h"
 #include "text.h"
+#include "usb_msc.h"
 
 /* app_header_update()'s "folder" argument (header.h) when there's no real
  * browser path to show - the browser failed to mount the SD card at boot,
@@ -31,11 +32,6 @@
 static struct k_work_delayable footer_sample_work;
 static struct k_work_delayable footer_draw_work;
 
-/* Set once app_browser_init() succeeds in main() - see on_header_event()
- * and the HEADER_FOLDER_FALLBACK comment above.
- */
-static bool browser_ready;
-
 /*
  * Registered with both app_rtc_set_alarm() (fires once a minute) and
  * app_charger_set_change_callback() (fires on every STAT transition) -
@@ -48,8 +44,10 @@ static void on_header_event(void)
 {
 	app_fuel_gauge_notify_charger_state(app_charger_is_charging());
 
-	const char *folder = browser_ready ? app_browser_get_current_path()
-					    : HEADER_FOLDER_FALLBACK;
+	const char *folder = app_usb_msc_is_active()
+				      ? "Connected to computer"
+				      : (app_browser_is_ready() ? app_browser_get_current_path()
+								 : HEADER_FOLDER_FALLBACK);
 
 	if (app_header_update(folder) > 0) {
 		app_text_flush();
@@ -120,11 +118,21 @@ int main(void)
 		 * back to a plain header + full refresh so the footer at
 		 * least isn't left unflushed.
 		 */
-		browser_ready = (app_browser_init("/") == 0);
-		if (!browser_ready) {
+		if (app_browser_init("/") != 0) {
 			printk("main: browser init failed - no SD card?\n");
 			app_header_update(HEADER_FOLDER_FALLBACK);
 			app_text_full_refresh();
+		}
+
+		/*
+		 * Registers for VBUS notifications but doesn't attach to the
+		 * bus yet (see usb_msc.h) - safe to call regardless of the
+		 * browser init result above, and needs to run after it since
+		 * a USB disconnect later re-enters the browser at whatever
+		 * path app_browser_init() just established.
+		 */
+		if (app_usb_msc_init()) {
+			printk("main: USB Mass Storage init failed\n");
 		}
 
 		/*

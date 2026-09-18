@@ -164,6 +164,17 @@
 	status = "okay";
 };
 
+/*
+ * Native USB device peripheral - VBUS/D+/D- are wired directly to it (see
+ * the README pinout table), used by usb_msc.c for the USB Mass Storage
+ * file-browser feature. zephyr_udc0 is the node label Zephyr's USB device
+ * stack looks up by name (DT_NODELABEL(zephyr_udc0)), same convention
+ * every in-tree nRF52840 board uses (e.g. nrf52840dk_nrf52840.dts).
+ */
+zephyr_udc0: &usbd {
+	status = "okay";
+};
+
 /* RTC (PCF85063) + fuel gauge (MAX17055) */
 &i2c1 {
 	compatible = "nordic,nrf-twim";
@@ -229,18 +240,30 @@
 	 * enables/times it explicitly rather than letting this driver
 	 * toggle it around every init, per the app-level sequencing this
 	 * board's known power/display interaction needs (see sd.c).
-	 * 4MHz matches the display's own already-verified-stable
-	 * spi-max-frequency on this same bus/traces - conservative for a
-	 * first bring-up, can be raised once read back verified on
-	 * hardware (SD-over-SPI supports up to 25MHz standard speed; the
-	 * driver itself negotiates up from 400kHz during card init
-	 * regardless of this ceiling).
+	 * Raised from the original 4MHz first-bring-up value to 16MHz
+	 * 2026-09-18, chasing a USB Mass Storage (usb_msc.c) directory
+	 * listing that was still very slow to enumerate on a real host even
+	 * after fixing the spi3 PM refcounting bug (display.c) and batching
+	 * MSC's own reads (CONFIG_USBD_MSC_SCSI_BUFFER_SIZE in prj.conf) -
+	 * 4MHz's own raw throughput ceiling (~500KB/s best-case, worse in
+	 * practice with per-command overhead) was the next suspect. This is
+	 * a real, independent SPI transaction config specific to this node -
+	 * not shared with the display's own (still-4MHz) spi-max-frequency,
+	 * so this doesn't touch the display's timing at all. 16MHz leaves
+	 * real margin under the SD-over-SPI standard-speed ceiling (25MHz)
+	 * rather than jumping straight to it, given the bus/traces
+	 * themselves have never been verified above 4MHz for either
+	 * peripheral sharing them - the driver itself still negotiates up
+	 * from 400kHz during card init regardless of this ceiling. Needs
+	 * on-hardware verification (no read/write/CRC errors, and does it
+	 * actually fix the slow-listing symptom) - raise further, or back
+	 * off, based on that.
 	 */
 	sdhc0: sdhc@1 {
 		compatible = "zephyr,sdhc-spi-slot";
 		reg = <1>;
 		status = "okay";
-		spi-max-frequency = <4000000>;
+		spi-max-frequency = <16000000>;
 
 		mmc {
 			compatible = "zephyr,sdmmc-disk";

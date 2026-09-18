@@ -60,6 +60,8 @@ static uint16_t content_rows;
 
 static uint8_t partial_count;
 
+static bool browser_ready;
+
 static void on_button(enum app_button button);
 
 /* .bmk files are per-book reader-progress sidecars (reader.c) - purely
@@ -421,6 +423,8 @@ int app_browser_init(const char *root)
 	uint16_t rows;
 	int ret;
 
+	browser_ready = false;
+
 	app_text_get_grid(&grid_cols, &rows);
 	if (rows < 3) {
 		/* Need at least the header row, one content row, and the
@@ -454,7 +458,14 @@ int app_browser_init(const char *root)
 
 	app_buttons_set_press_callback(on_button);
 
+	browser_ready = true;
+
 	return 0;
+}
+
+bool app_browser_is_ready(void)
+{
+	return browser_ready;
 }
 
 const char *app_browser_get_current_path(void)

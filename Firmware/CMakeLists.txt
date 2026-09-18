@@ -27,6 +27,7 @@ target_sources(app PRIVATE
 	src/power/currentlog.c
 	src/storage/sd.c
 	src/book/npb.c
+	src/usb/usb_msc.c
 )
 
 target_include_directories(app PRIVATE
@@ -38,4 +39,5 @@ target_include_directories(app PRIVATE
 	src/drivers
 	src/storage
 	src/book
+	src/usb
 )

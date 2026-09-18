@@ -3,6 +3,8 @@
 #ifndef APP_BROWSER_H_
 #define APP_BROWSER_H_
 
+#include <stdbool.h>
+
 /*
  * File/folder browser UI. Renders the SD card's directory listing into
  * text.c's grid, between the header (row 0, header.h) and footer (the
@@ -56,8 +58,25 @@
  *
  * Returns 0 on success, negative errno if the card couldn't be mounted
  * or `root` couldn't be listed (the card is left unpowered either way).
+ *
+ * Safe to call again later on an already-initialized browser (usb_msc.c
+ * does this on USB disconnect, passing app_browser_get_current_path()
+ * back in, to re-list whatever the host may have added/removed/renamed
+ * while it had the card) - re-registers the button callback and redraws
+ * from a fresh listing, same as the first call.
  */
 int app_browser_init(const char *root);
+
+/*
+ * Whether the most recent app_browser_init() call succeeded - i.e.
+ * whether app_browser_get_current_path() reflects a real, currently
+ * listable directory rather than just its unmounted default ("/"). False
+ * until the first successful app_browser_init() call, and again after one
+ * that fails (e.g. usb_msc.c re-initializing after a USB session where
+ * the card turned out to be missing) - main.c's header uses this to
+ * decide whether to show the real folder path or a "no SD card" fallback.
+ */
+bool app_browser_is_ready(void);
 
 /*
  * The browser's current directory, SD-root-relative and always starting

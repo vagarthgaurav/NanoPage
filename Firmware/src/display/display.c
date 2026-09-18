@@ -75,11 +75,45 @@ static const struct mipi_dbi_config epd_dbi_cfg = {
 /* See the comment on app_display_lock()/app_display_unlock() in display.h. */
 static K_MUTEX_DEFINE(display_bus_lock);
 
+/*
+ * Guarded by display_bus_lock for its whole lifetime, same as
+ * sd_power_refcount in sd.c - needed because usb_msc.c's
+ * app_sd_usb_claim()/app_sd_usb_release() (sd.h) hold app_display_lock()
+ * for an entire USB Mass Storage session instead of one bracketed
+ * operation like every other caller here: the actual SD block reads/
+ * writes during that session come from Zephyr's own MSC thread, issued
+ * directly against disk_access with no app_display_lock() bracket of
+ * their own at all (there's no single "operation" to bracket - blocks
+ * arrive asynchronously for as long as the host stays connected). Without
+ * this refcount, the periodic footer/header refresh's own nested
+ * app_display_lock()/app_display_unlock() pair would unconditionally
+ * suspend spi3 (pm_device_action_run(SUSPEND) below) the moment ITS
+ * refresh finished, yanking the SD card's bus out from under an
+ * in-flight USB transfer every time - confirmed the actual cause of a
+ * live MSC session taking tens of seconds to enumerate/list files on
+ * the host (2026-09-18): spi3's PM_DEVICE_ACTION_SUSPEND handler
+ * (spim_suspend() in spi_nrfx_spim.c) fully uninitializes the SPIM
+ * peripheral and switches its pins to the sleep pinctrl state
+ * (disconnected) - any SD-over-SPI transaction that lands while spi3
+ * sits in that state between refreshes gets no real response, and the
+ * SDHC-SPI driver's own retry/timeout loop eats real time before the
+ * next ~30s refresh briefly reconnects the bus long enough for a batch
+ * of reads to actually succeed. Refcounting this the same way
+ * app_sd_power_on()/app_sd_power_off() already refcount the SD
+ * regulator lets a long-lived hold (usb_msc.c) and brief nested ones
+ * (every other caller here) compose correctly instead of one cutting
+ * the bus out from under the other.
+ */
+static int spi3_pm_refcount;
+
 void app_display_lock(void)
 {
 	k_mutex_lock(&display_bus_lock, K_FOREVER);
 
-	pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_RESUME);
+	if (spi3_pm_refcount == 0) {
+		pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_RESUME);
+	}
+	spi3_pm_refcount++;
 
 	/*
 	 * Power the microSD card for the duration of whatever bus activity
@@ -106,7 +140,10 @@ void app_display_unlock(void)
 {
 	app_sd_power_off();
 
-	pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_SUSPEND);
+	spi3_pm_refcount--;
+	if (spi3_pm_refcount == 0) {
+		pm_device_action_run(spi3_dev, PM_DEVICE_ACTION_SUSPEND);
+	}
 
 	k_mutex_unlock(&display_bus_lock);
 }

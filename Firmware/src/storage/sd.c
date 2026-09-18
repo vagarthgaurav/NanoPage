@@ -8,6 +8,7 @@
 #include <zephyr/drivers/regulator.h>
 #include <zephyr/fs/fs.h>
 #include <zephyr/kernel.h>
+#include <zephyr/storage/disk_access.h>
 #include <zephyr/sys/printk.h>
 
 #include "config.h"
@@ -24,8 +25,7 @@
  * ever proves flaky against a real card.
  */
 
-#define DISK_DRIVE_NAME "SD"
-#define DISK_MOUNT_PT "/" DISK_DRIVE_NAME ":"
+#define DISK_MOUNT_PT "/" APP_SD_DISK_NAME ":"
 
 static const struct device *const sd_regulator = DEVICE_DT_GET(DT_NODELABEL(regulator_sdhc));
 
@@ -80,6 +80,15 @@ static struct fs_mount_t mp = {
 };
 
 static bool sd_mounted;
+
+/*
+ * Set for the duration of an app_sd_usb_claim()/app_sd_usb_release() hold
+ * (see sd.h) - guarded the same way as sd_power_refcount below (only ever
+ * touched while display_bus_lock is held), checked at the top of
+ * app_sd_init() so a live USB Mass Storage session can't race the rest of
+ * the app for the card.
+ */
+static bool sd_usb_claimed;
 
 /*
  * Guarded by display.c's display_bus_lock for its whole lifetime - every
@@ -142,6 +151,10 @@ int app_sd_init(void)
 {
 	int ret;
 
+	if (sd_usb_claimed) {
+		return -EBUSY;
+	}
+
 	app_display_lock();
 
 	/*
@@ -193,6 +206,76 @@ void app_sd_deinit(void)
 	 */
 	app_sd_power_off();
 
+	app_display_unlock();
+}
+
+int app_sd_usb_claim(void)
+{
+	int ret;
+
+	/*
+	 * Held for the *entire* USB session, not just released at the end
+	 * of this function like every other app_display_lock() caller -
+	 * see the long comment on spi3_pm_refcount in display.c for why.
+	 * In short: the actual SD block reads/writes during a live MSC
+	 * session come from Zephyr's own MSC thread, issued directly
+	 * against disk_access with no app_display_lock() bracket of their
+	 * own (there's no single "operation" to bracket - blocks arrive
+	 * asynchronously for as long as the host stays connected), so spi3
+	 * needs to stay resumed continuously for as long as USB owns the
+	 * card, not just flicker on/off around whatever else happens to
+	 * take this lock (the periodic footer/header refresh) in between.
+	 * app_sd_usb_release() releases this hold.
+	 */
+	app_display_lock();
+
+	/*
+	 * Set before touching power at all, and left set even if the rest
+	 * of this fails below - see the doc comment in sd.h for why the
+	 * card stays reserved for USB either way.
+	 */
+	sd_usb_claimed = true;
+
+	ret = app_sd_power_on();
+	if (ret) {
+		return ret;
+	}
+
+	ret = disk_access_init(APP_SD_DISK_NAME);
+	if (ret) {
+		printk("SD: USB disk_access_init failed (%d)\n", ret);
+		/*
+		 * Leave the power hold (and the app_display_lock() above) in
+		 * place even though init failed - same "inserted-but-
+		 * unpowered corrupts the shared bus" reasoning as
+		 * app_sd_init()'s identical choice on a failed fs_mount()
+		 * above, plus the host may still poll this LUN's status
+		 * periodically for the rest of the connection.
+		 * app_sd_usb_release() tears both down once the USB session
+		 * actually ends.
+		 */
+		return ret;
+	}
+
+	return 0;
+}
+
+void app_sd_usb_release(void)
+{
+	disk_access_ioctl(APP_SD_DISK_NAME, DISK_IOCTL_CTRL_DEINIT, NULL);
+
+	/* Releases app_sd_usb_claim()'s power hold - safe even if it was
+	 * never established (app_sd_power_off() is itself a no-op at
+	 * refcount 0).
+	 */
+	app_sd_power_off();
+
+	sd_usb_claimed = false;
+
+	/* Matches app_sd_usb_claim()'s app_display_lock() - only now does
+	 * spi3 actually get allowed to suspend again (see
+	 * spi3_pm_refcount in display.c).
+	 */
 	app_display_unlock();
 }
 

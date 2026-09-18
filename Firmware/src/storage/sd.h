@@ -58,6 +58,15 @@
  */
 
 /*
+ * Disk name the SD card is registered under (nanopage.dts's disk-name
+ * property, and the FATFS mount point below - "/" APP_SD_DISK_NAME ":").
+ * Shared with usb_msc.c so its USBD_DEFINE_MSC_LUN() and this file's own
+ * disk_access_*() calls (app_sd_usb_claim()/app_sd_usb_release() below)
+ * can't drift apart into naming two different disks.
+ */
+#define APP_SD_DISK_NAME "SD"
+
+/*
  * Powers the microSD card's load switch (regulator_sdhc, P1.11 - boots
  * off per nanopage.dts), waits for the card to settle, then mounts its
  * FAT filesystem. Returns 0 on success, a negative errno otherwise.
@@ -70,6 +79,13 @@
  * The card is left powered and mounted on return, independently of
  * the per-refresh power bracketing in display.c described above -
  * call app_sd_deinit() once truly done with the card (see below).
+ *
+ * Returns -EBUSY immediately, without touching power/CS/mount at all, if
+ * app_sd_usb_claim() (below) currently has the card reserved for USB Mass
+ * Storage - every caller in this app (browser.c, reader.c, currentlog.c)
+ * already treats a failed app_sd_init() as "card not available right
+ * now" and degrades gracefully, so this is enough to keep local access
+ * from racing a live USB session for the shared regulator/CS/bus state.
  */
 int app_sd_init(void);
 
@@ -80,6 +96,49 @@ int app_sd_init(void);
  * same reason as app_sd_init() above.
  */
 void app_sd_deinit(void);
+
+/*
+ * Hands the microSD card to USB Mass Storage (usb_msc.c) for the duration
+ * of a host connection: powers the card on (same regulator sequencing as
+ * app_sd_init()) and initializes the disk_access layer directly under
+ * APP_SD_DISK_NAME - no FAT mount, since USB MSC exposes the raw
+ * disk_access block device straight to the host rather than going through
+ * Zephyr's FS layer, and mounting locally at the same time would give the
+ * app's own FatFs cache and the host's independent view of the volume two
+ * unsynchronized copies of the same on-disk structures.
+ *
+ * Also makes every app_sd_init() call fail with -EBUSY (see above) for as
+ * long as this hold is active.
+ *
+ * Unlike every other caller in this file, this holds display.c's
+ * app_display_lock() for the *entire* session rather than releasing it
+ * before returning - the actual SD block reads/writes during a live MSC
+ * session come from Zephyr's own MSC thread, asynchronously, with no
+ * app_display_lock() bracket of their own, so spi3 needs to stay resumed
+ * continuously for as long as USB owns the card (see spi3_pm_refcount in
+ * display.c for the mechanism that makes this compose correctly with the
+ * periodic footer/header refresh's own much briefer nested holds).
+ * app_sd_usb_release() below releases it.
+ *
+ * Returns 0 on success, negative errno if the card couldn't be powered or
+ * initialized (e.g. no card inserted) - the app_sd_init() guard is set
+ * either way, since the card stays reserved for USB for the rest of this
+ * connection regardless of whether there's currently anything on it to
+ * serve. On failure, power is deliberately left on rather than cut - same
+ * "inserted-but-unpowered corrupts the shared bus" reasoning as
+ * app_sd_init()'s identical choice on a failed fs_mount() above;
+ * app_sd_usb_release() below powers it down once the session actually
+ * ends.
+ */
+int app_sd_usb_claim(void);
+
+/*
+ * Releases app_sd_usb_claim()'s hold: deinitializes the disk_access layer
+ * and powers the card off (same CS-low-before-power-down sequencing as
+ * app_sd_power_off()), then clears the app_sd_init() -EBUSY guard. Safe
+ * to call even if app_sd_usb_claim() was never called or failed.
+ */
+void app_sd_usb_release(void);
 
 /*
  * Reference-counted power control for the card's load switch, decoupled

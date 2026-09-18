@@ -39,6 +39,7 @@ static const struct gpio_dt_spec wake_buttons[] = {
 
 static int64_t last_activity_ms;
 static bool woke_from_system_off;
+static bool sleep_inhibited;
 
 /*
  * Direct NRF_POWER->RESETREAS read, not Zephyr's hwinfo subsystem - hwinfo's
@@ -150,7 +151,16 @@ static void enter_system_off(void)
 
 void app_power_check_idle(void)
 {
+	if (sleep_inhibited) {
+		return;
+	}
+
 	if (k_uptime_get() - last_activity_ms >= APP_POWER_IDLE_TIMEOUT_MS) {
 		enter_system_off();
 	}
+}
+
+void app_power_set_sleep_inhibited(bool inhibited)
+{
+	sleep_inhibited = inhibited;
 }
