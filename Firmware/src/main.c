@@ -85,8 +85,6 @@ static void footer_draw_handler(struct k_work *work)
 		app_fuel_gauge_save_learned_params();
 	}
 
-	app_power_check_idle();
-
 	k_work_schedule(&footer_sample_work,
 			K_SECONDS(APP_STATUS_REFRESH_INTERVAL_SEC - APP_STATUS_CURRENT_SAMPLE_LEAD_SEC));
 }

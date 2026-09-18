@@ -17,10 +17,14 @@
 #include "sd.h"
 
 /*
- * APP_POWER_IDLE_TIMEOUT_MS (config.h): checked from whatever cadence
- * app_power_check_idle() is called at (currently main.c's 30s
- * status-refresh tick), so this is a floor, not a precise deadline - fine
- * given the 30s granularity is <0.2% of the timeout.
+ * APP_POWER_IDLE_TIMEOUT_MS (config.h): enforced by idle_work, a
+ * k_work_delayable rescheduled to fire exactly APP_POWER_IDLE_TIMEOUT_MS
+ * out on every app_power_mark_activity() call (buttons.c, usb_msc.c) -
+ * not polled from some other subsystem's own cadence, so there's no lag
+ * from a periodic tick to account for. Backed by the system workqueue's
+ * timeout, which itself runs off the same 32.768kHz LFXO already clocking
+ * the kernel's tickless idle - no extra I2C/SPI traffic, no extra power,
+ * just exact timing instead of the old up-to-30s-plus-overhead slop.
  */
 
 /*
@@ -37,9 +41,11 @@ static const struct gpio_dt_spec wake_buttons[] = {
 	GPIO_DT_SPEC_GET(DT_ALIAS(sw_prev), gpios),
 };
 
-static int64_t last_activity_ms;
+static struct k_work_delayable idle_work;
 static bool woke_from_system_off;
 static bool sleep_inhibited;
+
+static void idle_work_handler(struct k_work *work);
 
 /*
  * Direct NRF_POWER->RESETREAS read, not Zephyr's hwinfo subsystem - hwinfo's
@@ -65,12 +71,26 @@ static void print_and_clear_reset_cause(void)
 void app_power_init(void)
 {
 	print_and_clear_reset_cause();
-	last_activity_ms = k_uptime_get();
+	k_work_init_delayable(&idle_work, idle_work_handler);
+	k_work_reschedule(&idle_work, K_MSEC(APP_POWER_IDLE_TIMEOUT_MS));
 }
 
 void app_power_mark_activity(void)
 {
-	last_activity_ms = k_uptime_get();
+	/*
+	 * Mirrors app_power_check_idle()'s old sleep_inhibited gate: while
+	 * inhibited, activity must not re-arm the idle timer, or a button
+	 * press mid-USB-session would schedule a System OFF that fires the
+	 * instant the inhibit is later lifted. app_power_set_sleep_inhibited()
+	 * cancels any pending idle_work up front for the same reason; the
+	 * caller lifting the inhibit is expected to call this again once
+	 * sleep_inhibited is back to false (see usb_msc.c's release_session()).
+	 */
+	if (sleep_inhibited) {
+		return;
+	}
+
+	k_work_reschedule(&idle_work, K_MSEC(APP_POWER_IDLE_TIMEOUT_MS));
 }
 
 /*
@@ -149,18 +169,29 @@ static void enter_system_off(void)
 	sys_poweroff();
 }
 
-void app_power_check_idle(void)
+static void idle_work_handler(struct k_work *work)
 {
+	ARG_UNUSED(work);
+
+	/*
+	 * Defensive, not the primary gate (that's app_power_mark_activity()
+	 * refusing to re-arm while inhibited, plus the cancel below on
+	 * entering an inhibit) - only matters if idle_work is already
+	 * running by the moment app_power_set_sleep_inhibited(true) tries to
+	 * cancel it.
+	 */
 	if (sleep_inhibited) {
 		return;
 	}
 
-	if (k_uptime_get() - last_activity_ms >= APP_POWER_IDLE_TIMEOUT_MS) {
-		enter_system_off();
-	}
+	enter_system_off();
 }
 
 void app_power_set_sleep_inhibited(bool inhibited)
 {
 	sleep_inhibited = inhibited;
+
+	if (inhibited) {
+		k_work_cancel_delayable(&idle_work);
+	}
 }
