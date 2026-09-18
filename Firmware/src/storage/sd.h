@@ -50,11 +50,37 @@
  *    place - proving the two mechanisms are independent and both need
  *    their own fix.
  *
+ * 3. ACTIVE backfeed during the SSD1680 driver's OWN automatic boot-time
+ *    refresh (found 2026-09-18, from a report of "random lines and other
+ *    artefacts" after every flash, needing a real battery power cycle -
+ *    not just a reset - to clear, reproduced only with a card inserted):
+ *    Zephyr's in-tree ssd16xx driver does a real hardware reset + full
+ *    RAM clear + full-waveform MASTER_ACTIVATION entirely on its own, as
+ *    part of its normal POST_KERNEL device init (CONFIG_DISPLAY_INIT_
+ *    PRIORITY, 85 by default) - before main() ever runs, so before
+ *    app_display_lock() has had a single chance to power the card. This
+ *    is mechanism 2 above, hitting the one refresh in the whole codebase
+ *    that isn't behind app_display_lock()/app_display_unlock() at all,
+ *    since it's driven entirely by Zephyr's own device model rather than
+ *    app code. Fixed with a pair of SYS_INIT hooks in sd.c
+ *    (sd_power_up_before_display_init()/sd_power_down_after_display_
+ *    init()) at fixed literal priorities 84/86, sandwiching the display's
+ *    85 (and both after regulator_sdhc's own init at 75, so the regulator
+ *    device is ready) - the release hook busy-waits BUSY itself before
+ *    powering down, since the driver's own init doesn't block on it
+ *    either (see the busy-wait comment on app_display_lock() in
+ *    display.c). If CONFIG_DISPLAY_INIT_PRIORITY is ever overridden in
+ *    prj.conf, these two literals need to move with it - they're
+ *    deliberately not derived from the Kconfig symbol (SYS_INIT's
+ *    priority argument has to be a plain literal, not an expression, per
+ *    how Zephyr turns it into a linker section name).
+ *
  * Net effect: the card's power is reference-counted (see
  * app_sd_power_on()/app_sd_power_off() below) so app_sd_init()'s own
- * longer-lived hold (for an actual mount/read) composes correctly with
- * display.c's much shorter nested hold around every single refresh,
- * regardless of which one asked for power first.
+ * longer-lived hold (for an actual mount/read), display.c's much shorter
+ * nested hold around every single refresh, and this file's own boot-time
+ * SYS_INIT bracket around the display driver's automatic init all compose
+ * correctly, regardless of which one asked for power first.
  */
 
 /*

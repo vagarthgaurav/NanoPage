@@ -7,6 +7,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/regulator.h>
 #include <zephyr/fs/fs.h>
+#include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/storage/disk_access.h>
 #include <zephyr/sys/printk.h>
@@ -146,6 +147,49 @@ void app_sd_power_off(void)
 		regulator_disable(sd_regulator);
 	}
 }
+
+/*
+ * Brackets the SSD1680 display driver's own automatic POST_KERNEL init
+ * (ssd16xx_init(), CONFIG_DISPLAY_INIT_PRIORITY - 85 by default) with SD
+ * power the same way app_display_lock()/app_display_unlock() bracket
+ * every other refresh - see mechanism 3 in the big comment on sd.h. These
+ * priorities (84/86) are plain literals, not derived from
+ * CONFIG_DISPLAY_INIT_PRIORITY - SYS_INIT's priority argument has to be a
+ * literal token, not an expression, since Zephyr turns it directly into a
+ * linker section name. Keep them in sync (84 < display's 85 < 86) if that
+ * Kconfig value is ever overridden in prj.conf. 84 also has to stay above
+ * regulator_sdhc's own init priority (CONFIG_REGULATOR_FIXED_INIT_
+ * PRIORITY, 75 by default) so the regulator device is actually ready by
+ * the time app_sd_power_on() runs.
+ */
+static int sd_power_up_before_display_init(void)
+{
+	return app_sd_power_on();
+}
+SYS_INIT(sd_power_up_before_display_init, POST_KERNEL, 84);
+
+static int sd_power_down_after_display_init(void)
+{
+	/*
+	 * The driver's own init triggers a real full-waveform refresh
+	 * (MASTER_ACTIVATION) but - same as every refresh function in
+	 * display.c - never blocks on BUSY clearing itself, so this has to
+	 * wait it out manually before releasing power, mirroring
+	 * wait_busy() in display.c (which isn't reachable from here - it's
+	 * file-static, and duplicating this handful of lines is simpler
+	 * than exposing it).
+	 */
+	const struct gpio_dt_spec busy = GPIO_DT_SPEC_GET(DT_CHOSEN(zephyr_display), busy_gpios);
+
+	while (gpio_pin_get_dt(&busy) > 0) {
+		k_msleep(1);
+	}
+
+	app_sd_power_off();
+
+	return 0;
+}
+SYS_INIT(sd_power_down_after_display_init, POST_KERNEL, 86);
 
 int app_sd_init(void)
 {
