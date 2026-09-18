@@ -147,9 +147,14 @@ Struct definitions live in `Firmware/src/book/npb_bookmark_format.h`.
 A `.npb` file is pure, immutable converter output. Bookmarks and the
 last-read position are mutable, per-reader state, so they're kept
 **out** of the `.npb` file and instead live in a small companion sidecar,
-`<book>.npb.bmk`, next to it on the SD card and owned entirely by the
-device. This means re-converting a book (a fixed typo, an added font
-size) never risks wiping a reader's saved places, and the read-only
+`<book>.npb.bmk`, owned entirely by the device. The sidecar lives in a
+hidden `.nanopage` subfolder of the book's own directory rather than
+directly alongside it — e.g. a book at `/books/foo.npb` gets a sidecar at
+`/books/.nanopage/foo.npb.bmk` — so it doesn't clutter the file browser's
+listing with per-book bookkeeping the reader has no reason to see or
+delete (the on-device browser already omits any dot-prefixed entry from
+its listings). This means re-converting a book (a fixed typo, an added
+font size) never risks wiping a reader's saved places, and the read-only
 `.npb` file never needs a safe-to-mutate-on-flash story.
 
 The sidecar holds:
@@ -199,7 +204,8 @@ compression.
   file the browser hands off to it (`app_browser_init()`'s listing calls
   `app_reader_open()` for any selected `.npb` file), takes over Prev/Next
   for page turns and Action to close back to the browser, and reads/writes
-  the `.npb.bmk` sidecar for auto-resume. Book content defaults to the
+  the `.npb.bmk` sidecar (in its hidden `.nanopage` subfolder, see above)
+  for auto-resume. Book content defaults to the
   smallest font (`APP_TEXT_FONT_TAMZEN`) independent of whatever font the
   header/footer/browser are using, via `text.c`'s `app_text_draw_text_px()`
   (pixel-addressed, not tied to the active font's row grid — needed since

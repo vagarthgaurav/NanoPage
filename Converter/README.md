@@ -68,6 +68,7 @@ book), and row counts for each of the three pre-wrapped font sizes.
 
 ## Not built yet
 
-The on-device reader (`Firmware/src/book/reader.c`) that actually opens
-a `.npb` file and its `.npb.bmk` bookmark sidecar — this converter only
-produces the file, nothing reads it yet.
+The on-device reader (`Firmware/src/ui/screens/reader.c`) that actually opens
+a `.npb` file and its `.npb.bmk` bookmark sidecar (kept in a hidden
+`.nanopage` subfolder next to the book) — this converter only produces
+the file, nothing reads it yet.

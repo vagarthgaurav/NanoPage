@@ -22,11 +22,12 @@
  * Book content defaults to APP_TEXT_FONT_TAMZEN (the smallest size,
  * matching the rest of the UI) - see app_reader_set_font() below for
  * changing it, independent of whatever font header.c/footer.c/browser.c
- * use. Auto-resumes from the book's <path>.npb.bmk sidecar
- * (npb_bookmark_format.h) if one exists, starting from the beginning
- * otherwise; the sidecar's last_position is rewritten on every page turn
- * and again on close, so resume position survives a reboot or a plain
- * reflash.
+ * use. Auto-resumes from the book's sidecar (npb_bookmark_format.h) - a
+ * hidden ".nanopage" subfolder of the book's own directory, e.g.
+ * "/books/.nanopage/foo.npb.bmk" for a book at "/books/foo.npb" - if one
+ * exists, starting from the beginning otherwise; the sidecar's
+ * last_position is rewritten on every page turn and again on close, so
+ * resume position survives a reboot or a plain reflash.
  *
  * Refresh policy mirrors browser.c: a page turn always redraws every
  * visible content row (a page turn is inherently a full-content change,

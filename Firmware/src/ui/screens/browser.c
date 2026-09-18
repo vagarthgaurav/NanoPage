@@ -72,9 +72,13 @@ static void (*exit_cb)(void);
 static void on_button(enum app_button button);
 
 /* .bmk files are per-book reader-progress sidecars (reader.c) - purely
- * internal bookkeeping, never something the user opens directly, so they're
- * filtered out of the listing entirely rather than shown alongside the
- * .npb book they belong to.
+ * internal bookkeeping, never something the user opens directly. They now
+ * live inside a hidden ".nanopage" subfolder next to each book (see
+ * reader.c's APP_READER_BMK_DIR), which app_sd_list_dir() already omits
+ * from every listing on its own (sd.c skips any dot-prefixed entry), so
+ * this extension filter is only a defensive leftover in case an older
+ * sidecar (from before that folder existed) is still sitting directly
+ * next to a book on some card.
  */
 static bool has_bmk_extension(const char *name)
 {

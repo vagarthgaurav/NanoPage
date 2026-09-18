@@ -28,9 +28,35 @@
  */
 #define APP_READER_MAX_ROW_CHARS 64
 
+/*
+ * Sidecar files live in a hidden subfolder of the book's own directory
+ * (e.g. a book at "/books/foo.npb" gets a sidecar at
+ * "/books/.nanopage/foo.npb.bmk") rather than directly alongside it, so
+ * they don't clutter the file browser's listing with per-book bookkeeping
+ * the user has no reason to see or delete - previously they sat right
+ * next to the book as "<book>.npb.bmk" and were only hidden from the
+ * browser by an explicit ".bmk" extension filter (browser.c's
+ * has_bmk_extension()). "Hidden" here is only the FAT/dot-prefix sense
+ * app_sd_list_dir() already filters on (sd.c's fs_readdir() loop skips
+ * any entry whose name starts with '.') - there's no FAT hidden file
+ * attribute involved, and no on-device migration of pre-existing
+ * "<book>.npb.bmk" sidecars from before this folder existed.
+ */
+#define APP_READER_BMK_DIR ".nanopage"
+
 static struct npb_book book;
 static char full_path_buf[APP_SD_MAX_PATH_LEN];
-static char bmk_path[APP_SD_MAX_PATH_LEN + 8]; /* "<path>" + ".bmk" + NUL */
+/* Mount-prefixed path of the sidecar's containing hidden folder (e.g.
+ * "/SD:/books/.nanopage") - built alongside bmk_path below so
+ * app_reader_open() can fs_mkdir() it before the first save.
+ */
+static char bmk_dir_buf[APP_SD_MAX_PATH_LEN + sizeof(APP_READER_BMK_DIR) + 4];
+/* Mount-prefixed sidecar file path (e.g. "/SD:/books/.nanopage/foo.npb.bmk") -
+ * margin above bmk_dir_buf's own size covers "/" + the book's base filename
+ * (bounded by APP_SD_MAX_NAME_LEN, same as everywhere else a single SD
+ * entry name is held) + ".bmk" + NUL.
+ */
+static char bmk_path[APP_SD_MAX_PATH_LEN + sizeof(APP_READER_BMK_DIR) + APP_SD_MAX_NAME_LEN + 8];
 static void (*exit_cb)(void);
 static bool book_open;
 
@@ -410,6 +436,40 @@ static int open_book_at_font(uint32_t resume_offset, bool have_resume_offset)
 	return 0;
 }
 
+/*
+ * Fills bmk_dir_buf/bmk_path from `path` (the book's own SD-root-relative
+ * path, e.g. "/books/foo.npb") - see APP_READER_BMK_DIR's doc comment
+ * above for the folder layout. Requires the card to already be mounted
+ * (app_sd_full_path()'s own requirement). Returns 0 on success, negative
+ * errno if any piece doesn't fit its buffer.
+ */
+static int build_bmk_paths(const char *path)
+{
+	char rel_dir[APP_SD_MAX_PATH_LEN];
+	const char *slash = strrchr(path, '/');
+	const char *base = slash ? slash + 1 : path;
+	size_t dir_len = slash ? (size_t)(slash - path) : 0;
+	int ret;
+
+	if (dir_len + sizeof("/" APP_READER_BMK_DIR) > sizeof(rel_dir)) {
+		return -ENAMETOOLONG;
+	}
+	memcpy(rel_dir, path, dir_len);
+	strcpy(rel_dir + dir_len, "/" APP_READER_BMK_DIR);
+
+	ret = app_sd_full_path(rel_dir, bmk_dir_buf, sizeof(bmk_dir_buf));
+	if (ret) {
+		return ret;
+	}
+
+	ret = snprintf(bmk_path, sizeof(bmk_path), "%s/%s.bmk", bmk_dir_buf, base);
+	if (ret < 0 || (size_t)ret >= sizeof(bmk_path)) {
+		return -ENAMETOOLONG;
+	}
+
+	return 0;
+}
+
 int app_reader_open(const char *path, void (*on_exit)(void))
 {
 	int ret;
@@ -434,11 +494,26 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 		return ret;
 	}
 
-	ret = snprintf(bmk_path, sizeof(bmk_path), "%s.bmk", full_path_buf);
-	if (ret < 0 || (size_t)ret >= sizeof(bmk_path)) {
+	ret = build_bmk_paths(path);
+	if (ret) {
 		printk("reader: bookmark sidecar path too long for \"%s\"\n", path);
 		app_sd_deinit();
-		return -ENAMETOOLONG;
+		return ret;
+	}
+
+	/*
+	 * Best-effort - create the hidden sidecar folder if it doesn't exist
+	 * yet (first time this book's directory has ever had a bookmark
+	 * saved). -EEXIST is the expected, common case and not logged;
+	 * anything else just means save_bookmark()'s later fs_open(FS_O_
+	 * CREATE) will fail too and the position won't persist - same
+	 * degrade-gracefully behavior as every other SD failure in this app,
+	 * not fatal to opening the book itself.
+	 */
+	ret = fs_mkdir(bmk_dir_buf);
+	if (ret && ret != -EEXIST) {
+		printk("reader: couldn't create bookmark sidecar folder \"%s\" (%d)\n", bmk_dir_buf,
+		       ret);
 	}
 
 	ret = open_book_at_font(0, false);

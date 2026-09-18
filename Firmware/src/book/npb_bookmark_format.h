@@ -6,9 +6,11 @@
 #include <stdint.h>
 
 /*
- * NanoPage Book bookmark sidecar (<book>.npb.bmk) - on-disk format only,
- * no read/write logic here. See npb_format.h for the companion .npb
- * content format and docs/book-format.md for the full spec.
+ * NanoPage Book bookmark sidecar (e.g. "/books/.nanopage/foo.npb.bmk" for
+ * a book at "/books/foo.npb" - see reader.c's APP_READER_BMK_DIR) -
+ * on-disk format only, no read/write logic here. See npb_format.h for the
+ * companion .npb content format and docs/book-format.md for the full
+ * spec.
  *
  * A .npb file is pure, immutable PC-side converter output. Bookmarks and
  * the last-read position are mutable, per-reader state, so they live in
