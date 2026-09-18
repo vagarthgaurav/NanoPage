@@ -17,14 +17,14 @@ target_sources(app PRIVATE
 	src/ui/text.c
 	src/ui/fonts/font_tamzen.c
 	src/ui/fonts/font_siji.c
-	src/ui/header.c
-	src/ui/footer.c
-	src/ui/menu.c
-	src/ui/browser.c
-	src/ui/settings.c
-	src/ui/reader.c
-	src/ui/reader_menu.c
-	src/ui/toc.c
+	src/ui/statusbar/header.c
+	src/ui/statusbar/footer.c
+	src/ui/screens/menu.c
+	src/ui/screens/browser.c
+	src/ui/screens/settings.c
+	src/ui/screens/reader.c
+	src/ui/screens/reader_menu.c
+	src/ui/screens/toc.c
 	src/power/max17055.c
 	src/power/fuel_gauge.c
 	src/power/charger.c
@@ -40,6 +40,8 @@ target_include_directories(app PRIVATE
 	src/display
 	src/ui
 	src/ui/fonts
+	src/ui/screens
+	src/ui/statusbar
 	src/power
 	src/drivers
 	src/storage
