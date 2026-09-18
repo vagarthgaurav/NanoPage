@@ -2,8 +2,8 @@
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/flash.h>
-#include <zephyr/fs/nvs.h>
 #include <zephyr/kernel.h>
+#include <zephyr/kvss/nvs.h>
 #include <zephyr/storage/flash_map.h>
 
 #include "config.h"
@@ -13,8 +13,8 @@
 static const struct device *const fg_dev = DEVICE_DT_GET(DT_NODELABEL(fuel_gauge_ext));
 
 #define NVS_PARTITION storage_partition
-#define NVS_PARTITION_DEVICE FIXED_PARTITION_DEVICE(NVS_PARTITION)
-#define NVS_PARTITION_OFFSET FIXED_PARTITION_OFFSET(NVS_PARTITION)
+#define NVS_PARTITION_DEVICE PARTITION_DEVICE(NVS_PARTITION)
+#define NVS_PARTITION_OFFSET PARTITION_OFFSET(NVS_PARTITION)
 #define NVS_ID_LEARNED_PARAMS 1
 
 static struct nvs_fs nvs;
@@ -82,7 +82,7 @@ static int nvs_init_once(void)
 	}
 
 	nvs.sector_size = info.size;
-	nvs.sector_count = FIXED_PARTITION_SIZE(NVS_PARTITION) / info.size;
+	nvs.sector_count = PARTITION_SIZE(NVS_PARTITION) / info.size;
 
 	ret = nvs_mount(&nvs);
 	if (ret) {
