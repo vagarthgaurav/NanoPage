@@ -14,6 +14,7 @@
  *   5..11                        siji 0xe24d..0xe253
  *   12 APP_TEXT_ICON_BATTERY_MAX siji 0xe254 (full)
  *   13 APP_TEXT_ICON_SETTINGS    not siji - see below
+ *   14 APP_TEXT_ICON_BOOKMARK    not siji - see below
  */
 /* Generated from siji.bdf (stark/siji, MIT) - 13 hand-picked icon glyphs (cursor/folder/file/charging/9 battery levels), remapped to a contiguous local range 0..12 (real siji codepoints are scattered Unicode Private Use Area values - see the enum in font_siji.h for the mapping). 12x16px each (native 12x12, bottom-padded to a multiple of 8), CFB_FONT_MONO_VPACKED (24 bytes/glyph). */
 /*
@@ -56,6 +57,24 @@ static const uint8_t cfb_font_siji_icons[] = {
 	/* 13: APP_TEXT_ICON_SETTINGS - see the doc comment above */
 	0x0c, 0x00, 0xff, 0x0f, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x03, 0xff, 0x0f,
 	0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x60, 0x00, 0xff, 0x0f, 0x60, 0x00,
+	/*
+	 * 14: APP_TEXT_ICON_BOOKMARK - header.c's stand-in for the folder
+	 * name while a book is open (see header.c's app_header_update()).
+	 * A plain ribbon/tag shape: a solid rectangle (cols 3-8, rows 3-10)
+	 * tapering into a V-notch over its last two rows, leaving two
+	 * single-pixel legs at cols 3/8 on the bottom row - deliberately
+	 * inset within the full 12x16 glyph cell (3px of blank margin on
+	 * every side) rather than filling it, unlike every other icon in
+	 * this font, so it reads as visibly smaller sitting in the header
+	 * next to the clock - same hand-drawn-geometry approach as
+	 * APP_TEXT_ICON_SETTINGS above, no source glyph to trace. Verified
+	 * by rendering the bytes below back with this file's exact bit
+	 * convention (column-major, low byte = rows 0-7, bit N = row N) and
+	 * eyeballing the shape before ever touching real hardware, same
+	 * round-trip discipline as every other font in this project.
+	 */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x1f, 0xf8, 0x0f, 0xf8, 0x07,
+	0xf8, 0x07, 0xf8, 0x0f, 0xf8, 0x1f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 /*
@@ -71,5 +90,5 @@ const struct cfb_font font_siji_icons = {
 	.width = 12,
 	.height = 16,
 	.first_char = 0,
-	.last_char = APP_TEXT_ICON_SETTINGS,
+	.last_char = APP_TEXT_ICON_BOOKMARK,
 };

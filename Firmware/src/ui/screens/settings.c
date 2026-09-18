@@ -125,7 +125,7 @@ void app_settings_init(void (*on_exit)(void))
 	}
 
 	draw();
-	app_header_update("Settings");
+	app_header_update("Settings", false);
 	app_text_full_refresh();
 
 	app_buttons_set_press_callback(on_button);

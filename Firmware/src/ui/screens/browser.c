@@ -339,7 +339,7 @@ static void resume_browser(void)
 {
 	app_buttons_set_press_callback(on_button);
 	redraw_page();
-	app_header_update(current_path);
+	app_header_update(current_path, false);
 	app_text_full_refresh();
 	partial_count = 0;
 }
@@ -425,7 +425,7 @@ static void enter_selected(void)
 	 * header's folder text and the new listing land on screen together
 	 * instead of the header lagging until the next RTC-minute tick.
 	 */
-	app_header_update(current_path);
+	app_header_update(current_path, false);
 
 	/*
 	 * Always a full refresh, not routed through browser_flush()'s
@@ -487,7 +487,7 @@ static int browser_open(const char *root)
 	}
 
 	redraw_page();
-	app_header_update(current_path);
+	app_header_update(current_path, false);
 
 	/* First draw - full refresh for a clean, ghost-free start, same as
 	 * main.c's own boot-time app_text_full_refresh() call.

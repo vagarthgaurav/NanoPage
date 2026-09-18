@@ -39,6 +39,7 @@ static bool have_last;
 static char last_date_buf[24];
 static uint8_t last_percent;
 static bool last_charging;
+static bool last_bookmarked;
 /* Sized independently of sd.h's APP_SD_MAX_PATH_LEN - this only needs to
  * hold whatever `folder` the caller (browser.c) passes, and comparing the
  * full string (not the truncated on-screen version) is what actually
@@ -46,7 +47,7 @@ static bool last_charging;
  */
 static char last_folder[128];
 
-int app_header_update(const char *folder)
+int app_header_update(const char *folder, bool bookmarked)
 {
 	struct rtc_time now;
 	struct max17055_data_snapshot snap;
@@ -93,7 +94,8 @@ int app_header_update(const char *folder)
 	 * here means something the user would actually see changed.
 	 */
 	if (have_last && strcmp(date_buf, last_date_buf) == 0 && percent == last_percent &&
-	    charging == last_charging && strncmp(folder, last_folder, sizeof(last_folder)) == 0) {
+	    charging == last_charging && bookmarked == last_bookmarked &&
+	    strncmp(folder, last_folder, sizeof(last_folder)) == 0) {
 		return 0;
 	}
 
@@ -101,6 +103,7 @@ int app_header_update(const char *folder)
 	memcpy(last_date_buf, date_buf, date_len + 1);
 	last_percent = percent;
 	last_charging = charging;
+	last_bookmarked = bookmarked;
 	snprintf(last_folder, sizeof(last_folder), "%s", folder);
 
 	app_text_get_grid(&cols, &rows);
@@ -113,12 +116,24 @@ int app_header_update(const char *folder)
 
 	date_col = (cols > date_len) ? (int)(cols - date_len) / 2 : 0;
 
-	folder_len = strlen(folder);
-	folder_max = (date_col > APP_HEADER_ELEMENT_GAP_COLS) ? (size_t)date_col - 1 : 0;
-	if (folder_len > folder_max) {
-		folder_len = folder_max;
+	/*
+	 * Bookmark icon takes over the exact spot the folder name would
+	 * otherwise occupy - reader.c always passes an empty `folder`
+	 * alongside `bookmarked` (no folder path is meaningful while
+	 * reading a book), so there's nothing to truncate around here;
+	 * every other caller always passes bookmarked=false and lands on
+	 * the folder-text path exactly as before this parameter existed.
+	 */
+	if (bookmarked) {
+		app_text_draw_icon(APP_HEADER_ROW, app_text_col_to_px(0), APP_TEXT_ICON_BOOKMARK);
+	} else {
+		folder_len = strlen(folder);
+		folder_max = (date_col > APP_HEADER_ELEMENT_GAP_COLS) ? (size_t)date_col - 1 : 0;
+		if (folder_len > folder_max) {
+			folder_len = folder_max;
+		}
+		draw_str(APP_HEADER_ROW, 0, folder, folder_len);
 	}
-	draw_str(APP_HEADER_ROW, 0, folder, folder_len);
 
 	draw_str(APP_HEADER_ROW, (uint16_t)date_col, date_buf, date_len);
 

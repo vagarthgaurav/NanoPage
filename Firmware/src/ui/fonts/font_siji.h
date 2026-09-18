@@ -32,6 +32,10 @@
  * for where it actually comes from - but slots into the same contiguous
  * range/array the same way, just appended after the batch above instead
  * of interleaved, so none of the siji-sourced indices had to move.
+ *
+ * APP_TEXT_ICON_BOOKMARK (14) is a second hand-drawn addition, same
+ * reasoning as APP_TEXT_ICON_SETTINGS - siji has no bookmark glyph
+ * either. See font_siji.c for the shape.
  */
 enum app_text_icon {
 	APP_TEXT_ICON_CURSOR = 0,
@@ -41,6 +45,7 @@ enum app_text_icon {
 	APP_TEXT_ICON_BATTERY_MIN = 4,
 	APP_TEXT_ICON_BATTERY_MAX = 12, /* MIN..MAX = 9 fill levels, empty to full */
 	APP_TEXT_ICON_SETTINGS = 13,
+	APP_TEXT_ICON_BOOKMARK = 14,
 };
 
 #define APP_TEXT_ICON_BATTERY_LEVELS \

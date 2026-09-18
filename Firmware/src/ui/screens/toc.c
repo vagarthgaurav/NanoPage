@@ -48,11 +48,12 @@ static size_t entry_count;
 static size_t selected_index;
 static size_t scroll_offset;
 
-/* See reader_menu.h's top comment - handed straight through from
- * app_reader_menu_show(), unchanged; toc.c never routes back up through
- * the menu that opened it.
+/* Set once per app_toc_show() call - see toc.h's own doc comment on the
+ * two-callback split: on_back_cb returns to the in-book menu ("Back"),
+ * on_selected_cb returns straight to reading (an actual chapter jump).
  */
-static void (*exit_cb)(void);
+static void (*on_back_cb)(void);
+static void (*on_selected_cb)(void);
 
 static uint16_t grid_cols;
 static uint16_t content_start_row;
@@ -221,13 +222,16 @@ static void move_cursor(int delta)
 
 static void select_entry(void)
 {
-	void (*cb)(void) = exit_cb;
+	bool is_back;
+	void (*cb)(void);
 
 	if (entry_count == 0) {
 		return;
 	}
 
-	if (!entries[selected_index].is_back) {
+	is_back = entries[selected_index].is_back;
+
+	if (!is_back) {
 		int ret = app_reader_jump_to_offset(entries[selected_index].text_offset);
 
 		if (ret) {
@@ -238,6 +242,8 @@ static void select_entry(void)
 			 */
 		}
 	}
+
+	cb = is_back ? on_back_cb : on_selected_cb;
 
 	toc_active = false;
 	app_buttons_set_press_callback(NULL);
@@ -262,11 +268,12 @@ static void on_button(enum app_button button)
 	}
 }
 
-void app_toc_show(void (*on_exit)(void))
+void app_toc_show(void (*on_back)(void), void (*on_selected)(void))
 {
 	uint16_t rows;
 
-	exit_cb = on_exit;
+	on_back_cb = on_back;
+	on_selected_cb = on_selected;
 
 	app_text_get_grid(&grid_cols, &rows);
 	content_start_row = APP_HEADER_ROW + 1;
@@ -279,7 +286,7 @@ void app_toc_show(void (*on_exit)(void))
 	load_chapters();
 
 	redraw_page();
-	app_header_update("Table of Contents");
+	app_header_update("Table of Contents", false);
 
 	/* Always a full refresh - opening this screen is an infrequent,
 	 * deliberate transition, same reasoning as browser.c's own

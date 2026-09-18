@@ -173,10 +173,16 @@ partial-write corruption case to reason about. Every position in the
 sidecar is a text blob offset, the same coordinate space `npb_row`/
 `npb_chapter` offsets use, resolved via the same binary-search primitive
 described above — so a bookmark survives a font-size switch exactly like
-the auto-resume position and chapter jumps do. Bookmark slot management
-policy (fixed capacity vs. overwrite-oldest vs. letting the user pick
-which to delete, etc.) is reader-UI behavior, not format — deferred along
-with the rest of the reader implementation.
+the auto-resume position and chapter jumps do.
+
+Bookmark slot management policy is reader-UI behavior, not format —
+implemented in `reader.c` (see "What's implemented so far" below): a
+bookmark is keyed by its exact page-start blob offset, added or removed
+by the Prev+Action button combo (fixed capacity, once full a new
+bookmark is simply rejected rather than overwriting the oldest or
+picking one to evict). Per-bookmark labels are part of the on-disk
+format (`struct npb_bookmark.label`) but nothing currently sets one —
+every bookmark added on-device today is unlabeled.
 
 ## Size sanity check
 
@@ -263,11 +269,64 @@ compression.
   jump itself still need a live physical hold-Action test, not yet
   captured.
 
-Not yet built: the explicit-bookmark slots (`NPB_MAX_BOOKMARKS` - the
-reader menu's "Bookmarks" entry above is wired for this but currently
-inert) and any actual settings-menu UI to call `app_reader_set_font()`
-(separate from the new reader menu above - `settings.c` already exists
-and is reachable from the app menu, not the in-book one). How the reader
-hooks into `power.c`'s idle-timeout/System-OFF path (which today unmounts
-the SD card unconditionally with no "notify the active screen first"
-hook) is also still open.
+- **Explicit bookmark slots**, added 2026-09-18. Fills in `NPB_MAX_BOOKMARKS`
+  (the reader menu's "Bookmarks" entry above was wired for this but
+  inert until now). Two pieces:
+  - **The Prev+Action combo**, `buttons.c`'s fourth gesture (alongside
+    the long-press above) - holding Prev and Action together toggles a
+    bookmark at the current page. New `buttons.h` API,
+    `app_buttons_set_combo_callback()`: `buttons.c` tracks raw hold-state
+    for Prev/Action only while a combo callback is registered, and fires
+    it the instant the second button goes down while the first is
+    already held. This has one real, deliberate side effect: while
+    registered, Prev's own dispatch moves from press-triggered to
+    release-triggered (matching Action's existing longpress-echo-on-
+    release dispatch) - unavoidable, since whether a given Prev press
+    turns out to be solo or part of a chord can't be known until either
+    it's released alone or Action goes down while it's still held.
+    Detection uses one-shot suppression flags (set the instant the combo
+    fires, each consumed independently by its own button's next release/
+    echo) rather than a persistent "combo active" flag, specifically to
+    avoid a reset-timing race against the longpress device's own
+    asynchronously re-queued short-press echo event. `reader.c` registers
+    this callback only while an actual page is on screen (cleared
+    whenever reader_menu.c/toc.c/bookmarks.c take over button input,
+    re-registered on returning via `reopen_reading()`).
+  - **The bookmark itself**: `reader.c` now holds the whole bookmark
+    sidecar (`struct npb_bookmark_file`) resident in RAM for the reading
+    session (loaded once by `load_bookmark()` on first open, not
+    reloaded on a font switch - bookmarks survive that the same way
+    `last_position` already did), instead of the old `save_bookmark()`
+    that silently zeroed `bookmark_count` on every write. Toggling
+    (`toggle_bookmark()`) does a fresh, short-lived `npb_open()` just to
+    read the current page's blob offset, then adds or removes a slot
+    with plain in-memory array surgery before `save_bookmark()` writes
+    the whole struct back wholesale, per the sidecar's own fixed-size
+    "always rewritten in one shot" design. A **bookmark icon**
+    (`font_siji.h`'s new `APP_TEXT_ICON_BOOKMARK`, hand-drawn - a ribbon
+    shape tapering to a V-notch, same geometric-icon approach as the
+    existing settings "sliders" glyph, no source font for a bookmark
+    glyph) takes over the header's folder-name spot (`header.h`'s
+    `app_header_update()` gained a `bookmarked` bool parameter) whenever
+    the currently-displayed page has a bookmark - reader.c always passes
+    an empty folder alongside it, since no folder path is meaningful
+    while reading. `main.c`'s header-label priority chain gained
+    `app_reader_is_active()`/`app_bookmarks_is_active()` branches for
+    this. The reader menu's "Bookmarks" entry now opens
+    `Firmware/src/ui/screens/bookmarks.c`/`.h` - a scrollable list (same
+    cursor/synthetic-"Back"-at-index-0 convention as `toc.c`) showing
+    each bookmark's **page number**, resolved by binary-searching its
+    blob offset against the book's row table (same primitive `toc.c`
+    uses for a chapter) and dividing by a new `app_reader_get_content_rows()`
+    getter so the page-number math isn't duplicated outside reader.c.
+    Selecting a bookmark reuses `app_reader_jump_to_offset()` unchanged -
+    jumping to a saved place is the same operation regardless of whether
+    the offset came from a chapter or a bookmark. Builds clean; not yet
+    verified on real hardware.
+
+Not yet built: any actual settings-menu UI to call `app_reader_set_font()`
+(separate from the reader menu above - `settings.c` already exists and is
+reachable from the app menu, not the in-book one). How the reader hooks
+into `power.c`'s idle-timeout/System-OFF path (which today unmounts the
+SD card unconditionally with no "notify the active screen first" hook)
+is also still open.

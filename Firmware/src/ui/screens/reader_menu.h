@@ -14,9 +14,9 @@
  *
  *   - "Back to Book"       - returns to reading, position unchanged.
  *   - "Table of Contents"  - opens toc.c's chapter list (see toc.h).
- *   - "Bookmarks"          - reserved for future explicit-bookmark-slot
- *                            work (docs/book-format.md's NPB_MAX_BOOKMARKS
- *                            sidecar field); currently a no-op selection.
+ *   - "Bookmarks"          - opens bookmarks.c's bookmark list (see
+ *                            bookmarks.h) - the explicit bookmarks added/
+ *                            removed via reader.c's Prev+Action combo.
  *
  * Prev/Next move the cursor, Action launches the selected entry - same
  * as every other list screen in this app. Deliberately doesn't try to
@@ -25,11 +25,15 @@
  */
 
 /*
- * Shows the menu and takes over button input. `on_exit` is both this
- * menu's own "Back to Book" handler and the one it hands straight
- * through to toc.c (see toc.h) - selecting a chapter there returns
- * directly to reading, not back up through this menu, so there's only
- * ever one exit path regardless of how the user got here.
+ * Shows the menu and takes over button input. `on_exit` is this menu's
+ * own "Back to Book" handler, and also what toc.c/bookmarks.c call
+ * (as their `on_selected`, see toc.h/bookmarks.h) when the user actually
+ * picks a chapter or bookmark there - either way, reading resumes
+ * directly. Their own "Back" entry instead returns to *this* menu
+ * (reader_menu.c's own return_to_menu(), passed as their `on_back`), not
+ * all the way past it to the book - so backing out of the chapter/
+ * bookmark list lands you back here, where you can still switch to the
+ * other one or back out further to the book.
  */
 void app_reader_menu_show(void (*on_exit)(void));
 

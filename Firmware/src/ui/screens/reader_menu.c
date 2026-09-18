@@ -4,6 +4,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 
+#include "bookmarks.h"
 #include "buttons.h"
 #include "font_siji.h"
 #include "header.h"
@@ -118,20 +119,33 @@ static void launch_back(void)
 	exit_cb();
 }
 
+/*
+ * toc.c/bookmarks.c's "Back" hook (their own on_back, not this menu's
+ * own launch_back() above) - redisplays this same menu, with the same
+ * exit_cb it already has, rather than jumping straight back to reading.
+ * That's the whole point of this indirection: without it, toc.c/
+ * bookmarks.c's "Back" would have nothing to return to but exit_cb
+ * itself (reader.c's reopen_reading()), skipping this menu entirely -
+ * which is what the very first version of this screen did, before
+ * anyone noticed it meant "Back" inside the chapter list or bookmark
+ * list dumped you straight into the book instead of back to the menu
+ * you came from.
+ */
+static void return_to_menu(void)
+{
+	app_reader_menu_show(exit_cb);
+}
+
 static void launch_toc(void)
 {
 	menu_active = false;
-	app_toc_show(exit_cb);
+	app_toc_show(return_to_menu, exit_cb);
 }
 
-/*
- * Reserved for the explicit-bookmark-slot work docs/book-format.md's
- * NPB_MAX_BOOKMARKS sidecar field is already sized for - no bookmark UI
- * exists yet, so selecting this currently does nothing (stays on the
- * menu), rather than a half-built screen.
- */
 static void launch_bookmarks(void)
 {
+	menu_active = false;
+	app_bookmarks_show(return_to_menu, exit_cb);
 }
 
 static void on_button(enum app_button button)
@@ -161,7 +175,7 @@ void app_reader_menu_show(void (*on_exit)(void))
 	content_rows = (rows >= 2) ? (uint16_t)(rows - 2) : 0;
 
 	redraw();
-	app_header_update("Menu");
+	app_header_update("Menu", false);
 
 	/* Always a full refresh - opening this menu is an infrequent,
 	 * deliberate transition (same reasoning as menu.c's own

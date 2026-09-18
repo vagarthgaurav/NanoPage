@@ -155,7 +155,7 @@ void app_menu_show(void)
 	content_rows = (rows >= 2) ? (uint16_t)(rows - 2) : 0;
 
 	redraw();
-	app_header_update("Apps");
+	app_header_update("Apps", false);
 
 	/* Always a full refresh - this only ever runs at boot or when
 	 * returning from another app (an infrequent, deliberate transition,

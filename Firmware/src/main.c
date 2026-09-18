@@ -3,6 +3,7 @@
 #include <zephyr/drivers/rtc.h>
 #include <zephyr/kernel.h>
 
+#include "bookmarks.h"
 #include "browser.h"
 #include "buttons.h"
 #include "charger.h"
@@ -14,6 +15,7 @@
 #include "header.h"
 #include "menu.h"
 #include "power.h"
+#include "reader.h"
 #include "reader_menu.h"
 #include "rtc.h"
 #include "settings.h"
@@ -52,6 +54,7 @@ static void on_header_event(void)
 	app_fuel_gauge_notify_charger_state(app_charger_is_charging());
 
 	const char *folder;
+	bool bookmarked = false;
 
 	if (app_usb_msc_is_active()) {
 		folder = "Connected to computer";
@@ -63,13 +66,22 @@ static void on_header_event(void)
 		folder = "Menu";
 	} else if (app_toc_is_active()) {
 		folder = "Table of Contents";
+	} else if (app_bookmarks_is_active()) {
+		folder = "Bookmarks";
+	} else if (app_reader_is_active()) {
+		/* No folder path is meaningful while reading a book - the
+		 * bookmark icon (see header.h) takes over that spot instead
+		 * whenever the currently-displayed page has one.
+		 */
+		folder = "";
+		bookmarked = app_reader_current_page_bookmarked();
 	} else if (app_browser_is_ready()) {
 		folder = app_browser_get_current_path();
 	} else {
 		folder = HEADER_FOLDER_FALLBACK;
 	}
 
-	if (app_header_update(folder) > 0) {
+	if (app_header_update(folder, bookmarked) > 0) {
 		app_text_flush();
 	}
 }

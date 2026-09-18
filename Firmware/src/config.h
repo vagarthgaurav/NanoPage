@@ -59,6 +59,14 @@
  */
 #define APP_TOC_FULL_REFRESH_EVERY 10
 
+/* --- Bookmarks list (bookmarks.c) --- */
+
+/* Same reasoning as APP_TOC_FULL_REFRESH_EVERY - a bookmark list scrolls
+ * the same way a chapter list does (capped at NPB_MAX_BOOKMARKS entries,
+ * so in practice this rarely matters, but kept for consistency).
+ */
+#define APP_BOOKMARKS_FULL_REFRESH_EVERY 10
+
 /* --- SD card (sd.c) --- */
 
 /* Settle time after powering the SD rail on before the card is trusted to

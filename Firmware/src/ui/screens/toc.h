@@ -27,17 +27,21 @@
 
 /*
  * Shows the chapter list and takes over button input. Selecting "Back"
- * or a chapter both end this screen and call `on_exit` - a chapter
- * selection additionally repositions the book first
- * (app_reader_jump_to_offset(), reader.h) before calling it, so there is
- * exactly one exit path either way (see reader_menu.h's top comment for
- * why toc.c never routes back up through the menu that opened it).
+ * calls `on_back` - reader_menu.c's hook for redisplaying the in-book
+ * menu this screen was opened from, so backing out of the chapter list
+ * returns you to the menu, not all the way to the page. Selecting an
+ * actual chapter instead repositions the book first
+ * (app_reader_jump_to_offset(), reader.h) and calls `on_selected` -
+ * reader_menu.c passes its own `on_exit` through for this one, the same
+ * callback reader.c handed the menu in the first place, so picking a
+ * chapter really does return straight to reading rather than back to
+ * the menu.
  *
  * If the book has no chapters (npb_book.chapter_count == 0 - the source
  * EPUB had no nav doc/NCX) this still shows correctly, just with only
  * the "Back" entry - not treated as an error.
  */
-void app_toc_show(void (*on_exit)(void));
+void app_toc_show(void (*on_back)(void), void (*on_selected)(void));
 
 /* For main.c's header-label priority chain - see
  * app_reader_menu_is_active()'s identical purpose in reader_menu.h. */

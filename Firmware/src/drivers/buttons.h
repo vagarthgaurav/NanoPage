@@ -86,4 +86,41 @@ void app_buttons_set_press_callback(void (*cb)(enum app_button button));
  */
 void app_buttons_set_long_press_callback(void (*cb)(void));
 
+/*
+ * Registers `cb` to be called when Prev and Action are held down
+ * together (a chord, not a sequence - reader.c's bookmark toggle hook,
+ * the fourth gesture this three-button board needed alongside the
+ * long-press already used for the in-book menu). Only meaningful while
+ * registered: as soon as it's non-NULL, buttons.c starts tracking raw
+ * hold-state for Prev and Action so it can detect the chord, which has a
+ * real, deliberate side effect on Prev specifically - see below.
+ *
+ * Detection: on either button's raw *press*, if the other one is already
+ * held, `cb` fires immediately and both buttons' own normal dispatch
+ * (Prev's press_cb(APP_BUTTON_PREV), Action's press_cb(APP_BUTTON_ACTION)
+ * or long_press_cb()) is suppressed for that hold cycle - a one-shot
+ * suppression consumed the next time each button's own release/echo is
+ * processed, not a persistent "combo mode" the caller has to reason
+ * about.
+ *
+ * Side effect while a combo callback is registered: Prev's dispatch
+ * moves from press-triggered to release-triggered (matching Action's
+ * existing release-triggered dispatch via the longpress device - see
+ * app_buttons_set_press_callback()'s doc comment) - unavoidable, since
+ * whether a given Prev press is "solo" or "part of a chord" can't be
+ * known until either it's released alone or Action goes down while it's
+ * still held. No added delay beyond that - dispatch happens the instant
+ * the button that turns out to be solo is released, same as Action
+ * already does for a normal tap. When no combo callback is registered
+ * (every screen except reader.c's main reading view), Prev is completely
+ * unaffected - still raw, instant, press-triggered, exactly as before.
+ *
+ * Same single-slot/NULL-to-clear convention as the other two callbacks.
+ * Pass NULL when leaving the reading view (reader_menu.c/toc.c/
+ * bookmarks.c take over button input entirely while shown, and the
+ * chord only makes sense while an actual page is on screen) - reader.c
+ * re-registers it on returning to the page.
+ */
+void app_buttons_set_combo_callback(void (*cb)(void));
+
 #endif /* APP_BUTTONS_H_ */

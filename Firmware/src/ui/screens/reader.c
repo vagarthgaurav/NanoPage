@@ -7,6 +7,7 @@
 
 #include "buttons.h"
 #include "config.h"
+#include "header.h"
 #include "npb.h"
 #include "npb_bookmark_format.h"
 #include "reader.h"
@@ -83,7 +84,51 @@ static uint16_t reader_font_height;
 /* Row-table index of the first row currently shown on screen. */
 static uint32_t page_start_row;
 
+/*
+ * The whole bookmark sidecar, held in RAM for the duration of a reading
+ * session (loaded once in load_bookmark(), on the book's first open -
+ * NOT reloaded on a font switch, so bookmarks survive that, same as
+ * last_position already did). save_bookmark() always writes this struct
+ * back wholesale, so toggle_bookmark() can add/remove a slot with plain
+ * in-memory array surgery and no separate read-modify-write of the file.
+ * bookmarks.c reads a copy of bookmarks[0..bookmark_count) via
+ * app_reader_get_bookmarks() - see reader.h.
+ */
+static struct npb_bookmark_file bmk_state;
+
+/* Whether the page currently on screen has a bookmark on it - recomputed
+ * only when the displayed page actually changes (render_page(), which
+ * already has the book open to read row data, so this costs nothing
+ * extra there), not on every app_reader_current_page_bookmarked() call -
+ * see that function's own doc comment in reader.h.
+ */
+static bool page_bookmarked;
+
 static uint8_t partial_count;
+
+/* Index into bmk_state.bookmarks[] of the bookmark at `offset`, or -1 if
+ * none - a bookmark's text_offset is always an exact page-start blob
+ * offset (see toggle_bookmark()), so an exact match is the right test
+ * (not a range/containment check).
+ */
+static int bookmark_index_for_offset(uint32_t offset)
+{
+	for (uint8_t i = 0; i < bmk_state.bookmark_count; i++) {
+		if (bmk_state.bookmarks[i].text_offset == offset) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+/* Forward-declared: current_blob_offset()'s own definition sits right
+ * after render_page() (its doc comment explains why - it's the natural
+ * continuation of "what render_page() just drew"), but render_page()
+ * itself now needs it too, to compute page_bookmarked while the file's
+ * already open.
+ */
+static uint32_t current_blob_offset(void);
 
 static void reader_flush(void)
 {
@@ -153,6 +198,12 @@ static void render_page(void)
 		app_text_draw_text_px(y_px, text, reader_font);
 	}
 
+	/* Cheap here - book is already open and current_blob_offset() is
+	 * just one more row read - see page_bookmarked's own doc comment
+	 * above for why this is the one place that recomputes it.
+	 */
+	page_bookmarked = bookmark_index_for_offset(current_blob_offset()) >= 0;
+
 	npb_close(&book);
 }
 
@@ -175,9 +226,18 @@ static uint32_t current_blob_offset(void)
 	return 0;
 }
 
+/*
+ * Writes bmk_state wholesale to the sidecar - the whole struct, bookmarks
+ * array included, per npb_bookmark_format.h's "fixed-size, always
+ * rewritten in one shot" design. Refreshes last_position/last_font_id
+ * from the current reading position first; bmk_state.bookmarks[]/
+ * bookmark_count are left exactly as toggle_bookmark() (or load_bookmark()
+ * on first load) last set them - this function never touches bookmark
+ * content itself, only the position/font fields every save needs to
+ * update regardless of whether a bookmark changed.
+ */
 static void save_bookmark(void)
 {
-	struct npb_bookmark_file bmk;
 	struct fs_file_t f;
 	uint32_t last_position = 0;
 	int ret;
@@ -187,12 +247,10 @@ static void save_bookmark(void)
 		npb_close(&book);
 	}
 
-	memset(&bmk, 0, sizeof(bmk));
-	memcpy(bmk.magic, NPB_BOOKMARK_MAGIC, sizeof(bmk.magic));
-	bmk.version = NPB_BOOKMARK_VERSION;
-	bmk.last_font_id = book.font_id;
-	bmk.bookmark_count = 0;
-	bmk.last_position = last_position;
+	memcpy(bmk_state.magic, NPB_BOOKMARK_MAGIC, sizeof(bmk_state.magic));
+	bmk_state.version = NPB_BOOKMARK_VERSION;
+	bmk_state.last_font_id = book.font_id;
+	bmk_state.last_position = last_position;
 
 	fs_file_t_init(&f);
 	ret = fs_open(&f, bmk_path, FS_O_CREATE | FS_O_WRITE);
@@ -201,27 +259,37 @@ static void save_bookmark(void)
 		return;
 	}
 
-	ret = fs_write(&f, &bmk, sizeof(bmk));
-	if (ret < 0 || (size_t)ret != sizeof(bmk)) {
+	ret = fs_write(&f, &bmk_state, sizeof(bmk_state));
+	if (ret < 0 || (size_t)ret != sizeof(bmk_state)) {
 		printk("reader: failed to write bookmark sidecar (%d)\n", ret);
 	}
 
 	fs_close(&f);
 }
 
-/* Loads the sidecar (if any) and resolves its last_position to a starting
- * row via npb_find_row() - book-format.md's binary-search primitive.
- * Leaves page_start_row at 0 (start of book) if there's no sidecar yet, or
- * if anything about reading it fails - never treated as a fatal error, an
- * unreadable/missing sidecar just means "nothing to resume."
+/*
+ * Loads the sidecar (if any) into bmk_state wholesale - both the
+ * auto-resume position (resolved to a starting row via npb_find_row(),
+ * book-format.md's binary-search primitive) and every explicit bookmark,
+ * which stay resident in bmk_state for the rest of the reading session
+ * (see bmk_state's own doc comment above). Leaves page_start_row at 0
+ * and bmk_state at a fresh, empty-bookmarks default if there's no
+ * sidecar yet, or if anything about reading it fails - never treated as
+ * a fatal error, an unreadable/missing/corrupt sidecar just means
+ * "nothing to resume, no bookmarks yet," not a reason to fail opening
+ * the book.
  */
 static void load_bookmark(void)
 {
-	struct npb_bookmark_file bmk;
+	struct npb_bookmark_file on_disk;
 	struct fs_file_t f;
 	int ret;
 
 	page_start_row = 0;
+
+	memset(&bmk_state, 0, sizeof(bmk_state));
+	memcpy(bmk_state.magic, NPB_BOOKMARK_MAGIC, sizeof(bmk_state.magic));
+	bmk_state.version = NPB_BOOKMARK_VERSION;
 
 	fs_file_t_init(&f);
 	ret = fs_open(&f, bmk_path, FS_O_READ);
@@ -229,17 +297,92 @@ static void load_bookmark(void)
 		return;
 	}
 
-	ret = fs_read(&f, &bmk, sizeof(bmk));
+	ret = fs_read(&f, &on_disk, sizeof(on_disk));
 	fs_close(&f);
 
-	if (ret != sizeof(bmk) || memcmp(bmk.magic, NPB_BOOKMARK_MAGIC, sizeof(bmk.magic)) != 0) {
+	if (ret != sizeof(on_disk) ||
+	    memcmp(on_disk.magic, NPB_BOOKMARK_MAGIC, sizeof(on_disk.magic)) != 0) {
 		return;
+	}
+
+	bmk_state = on_disk;
+	if (bmk_state.bookmark_count > NPB_MAX_BOOKMARKS) {
+		/* Shouldn't happen from anything this firmware ever wrote,
+		 * but a corrupt/foreign file could claim more than the
+		 * array actually holds - clamp defensively rather than
+		 * reading past bmk_state.bookmarks[] later.
+		 */
+		bmk_state.bookmark_count = NPB_MAX_BOOKMARKS;
 	}
 
 	uint32_t row_index;
 
-	if (npb_find_row(&book, bmk.last_position, &row_index) == 0) {
+	if (npb_find_row(&book, bmk_state.last_position, &row_index) == 0) {
 		page_start_row = row_index;
+	}
+}
+
+/*
+ * The Prev+Action combo handler (buttons.h's app_buttons_set_combo_
+ * callback()) - see reader.h's top comment. Adds a bookmark at the
+ * current page's blob offset if none exists there yet (up to
+ * NPB_MAX_BOOKMARKS), removes it if one already does. Brackets its own
+ * app_sd_init()/app_sd_deinit() pair, same convention as turn_page()/
+ * app_reader_open() - a fresh, short-lived npb_open() just to read the
+ * current page's own blob offset (render_page() already computed
+ * page_bookmarked for the boolean question, but toggling needs the
+ * actual offset value: to store when adding, or to find the matching
+ * slot's index when removing).
+ */
+static void toggle_bookmark(void)
+{
+	uint32_t offset;
+	int idx;
+
+	if (!book_open) {
+		return;
+	}
+
+	if (app_sd_init()) {
+		printk("reader: SD unavailable, bookmark not toggled\n");
+		return;
+	}
+
+	if (npb_open(full_path_buf, reader_font, &book) != 0) {
+		app_sd_deinit();
+		return;
+	}
+	offset = current_blob_offset();
+	npb_close(&book);
+
+	idx = bookmark_index_for_offset(offset);
+
+	if (idx >= 0) {
+		memmove(&bmk_state.bookmarks[idx], &bmk_state.bookmarks[idx + 1],
+			(size_t)(bmk_state.bookmark_count - idx - 1) *
+				sizeof(bmk_state.bookmarks[0]));
+		bmk_state.bookmark_count--;
+		page_bookmarked = false;
+		printk("reader: bookmark removed at offset %u\n", offset);
+	} else if (bmk_state.bookmark_count < NPB_MAX_BOOKMARKS) {
+		struct npb_bookmark *slot = &bmk_state.bookmarks[bmk_state.bookmark_count++];
+
+		slot->text_offset = offset;
+		memset(slot->label, 0, sizeof(slot->label));
+		slot->reserved = 0;
+		page_bookmarked = true;
+		printk("reader: bookmark added at offset %u\n", offset);
+	} else {
+		printk("reader: bookmark list full (%d), not adding\n", NPB_MAX_BOOKMARKS);
+		app_sd_deinit();
+		return;
+	}
+
+	save_bookmark();
+	app_sd_deinit();
+
+	if (app_header_update("", page_bookmarked) > 0) {
+		app_text_flush();
 	}
 }
 
@@ -271,6 +414,15 @@ static void turn_page(int direction)
 	}
 
 	render_page();
+
+	/* Folded into the same flush as the page redraw below (text.c
+	 * coalesces adjacent dirty rows into one partial-refresh window),
+	 * so the header's bookmark icon updates in lockstep with turning
+	 * onto/off of a bookmarked page instead of lagging until the next
+	 * once-a-minute RTC tick.
+	 */
+	app_header_update("", page_bookmarked);
+
 	reader_flush();
 
 	/* Cheap relative to a page turn's own ~530ms+ partial-refresh wait,
@@ -296,6 +448,7 @@ static void close_reader(void)
 
 	app_buttons_set_press_callback(NULL);
 	app_buttons_set_long_press_callback(NULL);
+	app_buttons_set_combo_callback(NULL);
 
 	if (cb) {
 		cb();
@@ -320,26 +473,33 @@ static void on_button(enum app_button button)
 static void open_reader_menu(void);
 
 /*
- * app_reader_menu_show()'s on_exit - reader_menu.h/toc.h both funnel
- * every exit path (its own "Back to Book" entry, and toc.c's own "Back"
- * *and* a successful chapter jump - see app_reader_jump_to_offset())
- * through this same callback, so there's exactly one place that restores
- * reading: re-register this screen's own button callbacks (the menu/toc
- * screens took both over - see open_reader_menu() below) and repaint the
- * current page, which the menu overwrote. Full refresh, not
+ * app_reader_menu_show()'s on_exit - the callback reader.c hands to the
+ * in-book menu, which the menu then threads onward as reader_menu.c's
+ * own `exit_cb`: its own "Back to Book" entry calls this directly, and
+ * it's also what toc.c/bookmarks.c call as their `on_selected` when the
+ * user actually picks a chapter/bookmark (see app_reader_jump_to_offset()) -
+ * so there's exactly one place that restores reading: re-register this
+ * screen's own button callbacks (the menu/toc/bookmarks screens took
+ * them over - see open_reader_menu() below) and repaint the current
+ * page, which whichever screen was showing overwrote. Full refresh, not
  * reader_flush()'s partial-refresh counter, same reasoning as
  * app_reader_open()'s own first draw - this is a full screen-context
  * change, not an ordinary page turn.
  *
+ * Not the same as toc.c/bookmarks.c's own "Back" entry, which returns to
+ * the in-book menu instead (reader_menu.c's return_to_menu()), not all
+ * the way here - see toc.h/bookmarks.h's doc comments on their
+ * on_back/on_selected split.
+ *
  * One app_sd_init()/app_sd_deinit() bracket around render_page() - same
  * reasoning as turn_page()/app_reader_open()'s identical brackets
  * (render_page()'s own npb_open() needs the card mounted). Whichever
- * menu/toc action got here (reader_menu.c's "Back to Book", toc.c's own
- * "Back", or app_reader_jump_to_offset()) already closed its own SD
- * session before calling this, so without this bracket render_page()'s
- * npb_open() fails silently and the framebuffer is left showing
- * whatever the menu/toc screen last drew - the app_text_full_refresh()
- * below then just redundantly re-flashes that stale content, while the
+ * action got here (reader_menu.c's "Back to Book", or a toc.c/
+ * bookmarks.c jump via app_reader_jump_to_offset()) already closed its
+ * own SD session before calling this, so without this bracket
+ * render_page()'s npb_open() fails silently and the framebuffer is left
+ * showing whatever screen last drew - the app_text_full_refresh() below
+ * then just redundantly re-flashes that stale content, while the
  * button-callback switch above still silently takes effect. That's
  * exactly the "Back to Book doesn't work until a second press" bug this
  * fixes.
@@ -348,6 +508,7 @@ static void reopen_reading(void)
 {
 	app_buttons_set_press_callback(on_button);
 	app_buttons_set_long_press_callback(open_reader_menu);
+	app_buttons_set_combo_callback(toggle_bookmark);
 
 	if (app_sd_init()) {
 		printk("reader: SD unavailable, can't redraw after menu/toc\n");
@@ -355,6 +516,7 @@ static void reopen_reading(void)
 	}
 
 	render_page();
+	app_header_update("", page_bookmarked);
 	app_text_full_refresh();
 	partial_count = 0;
 
@@ -366,10 +528,14 @@ static void reopen_reading(void)
  * top comment. Hands off button input to reader_menu.c entirely; nothing
  * further happens here until reopen_reading() (passed through as its
  * whole exit chain, however many menu/toc levels deep the user went)
- * hands it back.
+ * hands it back. Clears the combo callback too - the Prev+Action
+ * bookmark toggle only makes sense while an actual page is on screen,
+ * not while reader_menu.c/toc.c/bookmarks.c own button input (which
+ * reopen_reading() above re-registers on the way back).
  */
 static void open_reader_menu(void)
 {
+	app_buttons_set_combo_callback(NULL);
 	app_reader_menu_show(reopen_reading);
 }
 
@@ -527,6 +693,7 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 	book_open = true;
 
 	render_page();
+	app_header_update("", page_bookmarked);
 
 	ret = app_text_full_refresh();
 
@@ -540,6 +707,7 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 
 	app_buttons_set_press_callback(on_button);
 	app_buttons_set_long_press_callback(open_reader_menu);
+	app_buttons_set_combo_callback(toggle_bookmark);
 
 	return 0;
 }
@@ -641,14 +809,47 @@ void app_reader_set_font(enum app_text_font font)
 			book_open = false;
 			app_buttons_set_press_callback(NULL);
 			app_buttons_set_long_press_callback(NULL);
+			app_buttons_set_combo_callback(NULL);
 			app_sd_deinit();
 			return;
 		}
 	}
 
 	render_page();
+	app_header_update("", page_bookmarked);
 	app_text_full_refresh();
 	partial_count = 0;
 
 	app_sd_deinit();
+}
+
+bool app_reader_is_active(void)
+{
+	return book_open;
+}
+
+bool app_reader_current_page_bookmarked(void)
+{
+	return book_open && page_bookmarked;
+}
+
+uint16_t app_reader_get_content_rows(void)
+{
+	return book_open ? content_rows : 0;
+}
+
+int app_reader_get_bookmarks(struct npb_bookmark *out, size_t max, size_t *count)
+{
+	size_t n;
+
+	if (!book_open) {
+		return -EINVAL;
+	}
+
+	n = MIN((size_t)bmk_state.bookmark_count, max);
+
+	memcpy(out, bmk_state.bookmarks, n * sizeof(out[0]));
+	*count = n;
+
+	return 0;
 }

@@ -25,6 +25,7 @@ target_sources(app PRIVATE
 	src/ui/screens/reader.c
 	src/ui/screens/reader_menu.c
 	src/ui/screens/toc.c
+	src/ui/screens/bookmarks.c
 	src/power/max17055.c
 	src/power/fuel_gauge.c
 	src/power/charger.c
