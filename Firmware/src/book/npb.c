@@ -92,6 +92,8 @@ int npb_open(const char *path, enum app_text_font font, struct npb_book *book)
 	book->row_count = variant.row_count;
 	book->text_blob_offset = header.text_blob_offset;
 	book->text_blob_size = header.text_blob_size;
+	book->chapter_table_offset = header.chapter_table_offset;
+	book->chapter_count = header.chapter_count;
 	book->font_id = variant.font_id;
 
 	return 0;
@@ -113,6 +115,16 @@ int npb_read_row(struct npb_book *book, uint32_t row_index, struct npb_row *out)
 	}
 
 	return read_at(book, book->row_table_offset + (off_t)row_index * sizeof(*out), out,
+		       sizeof(*out));
+}
+
+int npb_read_chapter(struct npb_book *book, uint32_t chapter_index, struct npb_chapter *out)
+{
+	if (chapter_index >= book->chapter_count) {
+		return -EINVAL;
+	}
+
+	return read_at(book, book->chapter_table_offset + (off_t)chapter_index * sizeof(*out), out,
 		       sizeof(*out));
 }
 

@@ -52,6 +52,13 @@
  */
 #define APP_READER_FULL_REFRESH_EVERY 10
 
+/* --- Chapter list (toc.c) --- */
+
+/* Same reasoning as APP_BROWSER_FULL_REFRESH_EVERY - a long chapter list
+ * scrolls the same way a directory listing does.
+ */
+#define APP_TOC_FULL_REFRESH_EVERY 10
+
 /* --- SD card (sd.c) --- */
 
 /* Settle time after powering the SD rail on before the card is trusted to

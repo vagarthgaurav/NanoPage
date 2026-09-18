@@ -23,6 +23,8 @@ target_sources(app PRIVATE
 	src/ui/browser.c
 	src/ui/settings.c
 	src/ui/reader.c
+	src/ui/reader_menu.c
+	src/ui/toc.c
 	src/power/max17055.c
 	src/power/fuel_gauge.c
 	src/power/charger.c

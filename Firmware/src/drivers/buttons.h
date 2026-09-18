@@ -61,7 +61,29 @@ int app_buttons_init(void);
  * NULL to stop being notified. app_power_mark_activity() is called for
  * every press regardless of whether a callback is registered, so the
  * idle timer keeps working even with none set.
+ *
+ * APP_BUTTON_ACTION here is sourced from nanopage.dts's `longpress`
+ * pseudo-device's short-press echo, not the raw gpio-keys press - see
+ * app_buttons_set_long_press_callback() below for why, and buttons.c for
+ * the device-filtering that makes this transparent to every caller. The
+ * practical effect: Action now dispatches on release rather than on
+ * press (unavoidable - short vs. long can't be known until then), a few
+ * hundred ms later than before for a normal tap. Prev/Next are
+ * unaffected - still raw, instant, press-triggered gpio-keys events.
  */
 void app_buttons_set_press_callback(void (*cb)(enum app_button button));
+
+/*
+ * Registers `cb` to be called when the Action button is held for at
+ * least the `long-delay-ms` nanopage.dts's `longpress` node specifies
+ * (currently 500ms) - reader.c's hook for opening the in-book menu
+ * (reader_menu.h) without a fourth physical button. Only Action has a
+ * long-press variant; Prev/Next don't. Same single-slot/NULL-to-clear
+ * convention as app_buttons_set_press_callback() above, but tracked
+ * separately - a screen can register a press callback without a
+ * long-press one (every screen except reader.c's main reading view
+ * leaves this NULL, so a long-press does nothing there).
+ */
+void app_buttons_set_long_press_callback(void (*cb)(void));
 
 #endif /* APP_BUTTONS_H_ */

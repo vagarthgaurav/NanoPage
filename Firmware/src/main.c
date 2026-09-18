@@ -14,9 +14,11 @@
 #include "header.h"
 #include "menu.h"
 #include "power.h"
+#include "reader_menu.h"
 #include "rtc.h"
 #include "settings.h"
 #include "text.h"
+#include "toc.h"
 #include "usb_msc.h"
 
 /* app_header_update()'s "folder" argument (header.h) when there's no real
@@ -57,6 +59,10 @@ static void on_header_event(void)
 		folder = "Apps";
 	} else if (app_settings_is_active()) {
 		folder = "Settings";
+	} else if (app_reader_menu_is_active()) {
+		folder = "Menu";
+	} else if (app_toc_is_active()) {
+		folder = "Table of Contents";
 	} else if (app_browser_is_ready()) {
 		folder = app_browser_get_current_path();
 	} else {

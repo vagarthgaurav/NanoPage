@@ -24,7 +24,7 @@
 		zephyr,display = &epd_panel;
 	};
 
-	buttons {
+	buttons_input: buttons {
 		compatible = "gpio-keys";
 
 		/* P0.09/NFC1 - needs &uicr nfct-pins-as-gpios below to read as GPIO */
@@ -43,6 +43,30 @@
 			gpios = <&gpio0 24 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
 			zephyr,code = <INPUT_KEY_LEFT>;
 		};
+	};
+
+	/*
+	 * Long-press detection for the Action button only, via Zephyr's
+	 * in-tree zephyr,input-longpress pseudo-device (subsys/input/
+	 * input_longpress.c) - reused instead of hand-rolled hold-timing
+	 * logic in buttons.c. Watches buttons_input for INPUT_KEY_ENTER and,
+	 * on release, re-emits either the same code (short press, < 500ms -
+	 * this is what buttons.c now treats as the real "Action" press
+	 * everywhere, not the raw buttons_input event, so every screen's
+	 * Action handling now fires on release rather than on press - see
+	 * buttons.c) or INPUT_KEY_MENU (held >= 500ms), which reader.c uses
+	 * to open the in-book menu (Table of Contents/Bookmarks) - see
+	 * reader_menu.h. Prev/Next are deliberately left unwrapped so paging
+	 * stays instant. CONFIG_INPUT_LONGPRESS is enabled automatically
+	 * (default y, gated on this node existing - see subsys/input/Kconfig).
+	 */
+	action_longpress: longpress {
+		compatible = "zephyr,input-longpress";
+		input = <&buttons_input>;
+		input-codes = <INPUT_KEY_ENTER>;
+		short-codes = <INPUT_KEY_ENTER>;
+		long-codes = <INPUT_KEY_MENU>;
+		long-delay-ms = <500>;
 	};
 
 	/* microSD load switch enable, P1.11 */

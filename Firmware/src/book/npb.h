@@ -44,6 +44,8 @@ struct npb_book {
 	uint32_t row_count;
 	uint32_t text_blob_offset;
 	uint32_t text_blob_size;
+	uint32_t chapter_table_offset;
+	uint32_t chapter_count;
 	uint8_t font_id; /* enum npb_font_id - the variant that was matched */
 };
 
@@ -66,6 +68,17 @@ void npb_close(struct npb_book *book);
  * I/O failure.
  */
 int npb_read_row(struct npb_book *book, uint32_t row_index, struct npb_row *out);
+
+/*
+ * Reads chapter table entry `chapter_index` (0-based) into `out` - see
+ * npb_format.h's struct npb_chapter and docs/book-format.md's "Chapters"
+ * section. Returns 0 on success, -EINVAL if chapter_index >=
+ * book->chapter_count, negative errno on an I/O failure. A book with no
+ * detected chapters (book->chapter_count == 0, e.g. the source EPUB had
+ * no nav doc/NCX) always fails with -EINVAL here - not an error case
+ * callers (toc.c) need to treat specially, just an empty table.
+ */
+int npb_read_chapter(struct npb_book *book, uint32_t chapter_index, struct npb_chapter *out);
 
 /*
  * Reads `length` bytes starting at `blob_offset` (a byte offset into the

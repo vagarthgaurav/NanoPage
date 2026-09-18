@@ -10,6 +10,7 @@
 #include "npb.h"
 #include "npb_bookmark_format.h"
 #include "reader.h"
+#include "reader_menu.h"
 #include "sd.h"
 #include "text.h"
 
@@ -268,6 +269,7 @@ static void close_reader(void)
 	book_open = false;
 
 	app_buttons_set_press_callback(NULL);
+	app_buttons_set_long_press_callback(NULL);
 
 	if (cb) {
 		cb();
@@ -287,6 +289,62 @@ static void on_button(enum app_button button)
 		close_reader();
 		break;
 	}
+}
+
+static void open_reader_menu(void);
+
+/*
+ * app_reader_menu_show()'s on_exit - reader_menu.h/toc.h both funnel
+ * every exit path (its own "Back to Book" entry, and toc.c's own "Back"
+ * *and* a successful chapter jump - see app_reader_jump_to_offset())
+ * through this same callback, so there's exactly one place that restores
+ * reading: re-register this screen's own button callbacks (the menu/toc
+ * screens took both over - see open_reader_menu() below) and repaint the
+ * current page, which the menu overwrote. Full refresh, not
+ * reader_flush()'s partial-refresh counter, same reasoning as
+ * app_reader_open()'s own first draw - this is a full screen-context
+ * change, not an ordinary page turn.
+ *
+ * One app_sd_init()/app_sd_deinit() bracket around render_page() - same
+ * reasoning as turn_page()/app_reader_open()'s identical brackets
+ * (render_page()'s own npb_open() needs the card mounted). Whichever
+ * menu/toc action got here (reader_menu.c's "Back to Book", toc.c's own
+ * "Back", or app_reader_jump_to_offset()) already closed its own SD
+ * session before calling this, so without this bracket render_page()'s
+ * npb_open() fails silently and the framebuffer is left showing
+ * whatever the menu/toc screen last drew - the app_text_full_refresh()
+ * below then just redundantly re-flashes that stale content, while the
+ * button-callback switch above still silently takes effect. That's
+ * exactly the "Back to Book doesn't work until a second press" bug this
+ * fixes.
+ */
+static void reopen_reading(void)
+{
+	app_buttons_set_press_callback(on_button);
+	app_buttons_set_long_press_callback(open_reader_menu);
+
+	if (app_sd_init()) {
+		printk("reader: SD unavailable, can't redraw after menu/toc\n");
+		return;
+	}
+
+	render_page();
+	app_text_full_refresh();
+	partial_count = 0;
+
+	app_sd_deinit();
+}
+
+/*
+ * buttons.h's long-press callback while a book is open - see reader.h's
+ * top comment. Hands off button input to reader_menu.c entirely; nothing
+ * further happens here until reopen_reading() (passed through as its
+ * whole exit chain, however many menu/toc levels deep the user went)
+ * hands it back.
+ */
+static void open_reader_menu(void)
+{
+	app_reader_menu_show(reopen_reading);
 }
 
 /*
@@ -406,6 +464,7 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 	}
 
 	app_buttons_set_press_callback(on_button);
+	app_buttons_set_long_press_callback(open_reader_menu);
 
 	return 0;
 }
@@ -413,6 +472,47 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 enum app_text_font app_reader_get_font(void)
 {
 	return reader_font;
+}
+
+const char *app_reader_get_path(void)
+{
+	return full_path_buf;
+}
+
+int app_reader_jump_to_offset(uint32_t text_offset)
+{
+	uint32_t row_index;
+	int ret;
+
+	if (!book_open) {
+		return -EINVAL;
+	}
+
+	ret = app_sd_init();
+	if (ret) {
+		return ret;
+	}
+
+	ret = npb_open(full_path_buf, reader_font, &book);
+	if (ret) {
+		app_sd_deinit();
+		return ret;
+	}
+
+	ret = npb_find_row(&book, text_offset, &row_index);
+	npb_close(&book);
+
+	if (ret) {
+		app_sd_deinit();
+		return ret;
+	}
+
+	page_start_row = row_index;
+	save_bookmark();
+
+	app_sd_deinit();
+
+	return 0;
 }
 
 void app_reader_set_font(enum app_text_font font)
@@ -465,6 +565,7 @@ void app_reader_set_font(enum app_text_font font)
 			 */
 			book_open = false;
 			app_buttons_set_press_callback(NULL);
+			app_buttons_set_long_press_callback(NULL);
 			app_sd_deinit();
 			return;
 		}

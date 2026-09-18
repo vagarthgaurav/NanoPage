@@ -35,6 +35,14 @@
  * app_text_full_refresh() instead to clear partial-refresh ghosting -
  * same reasoning and same per-module counter convention as
  * APP_BROWSER_FULL_REFRESH_EVERY in browser.c.
+ *
+ * Also registers a long-press callback (buttons.h) while a book is open:
+ * holding Action opens reader_menu.h's in-book menu (Table of Contents,
+ * Bookmarks) instead of turning a page or closing the book - the three
+ * physical buttons are otherwise fully committed to paging/closing, so
+ * hold-duration is what stands in for a fourth button. See
+ * app_reader_jump_to_offset() below for the primitive that lets that
+ * menu (by way of toc.c) reposition an already-open book.
  */
 
 /*
@@ -57,6 +65,40 @@ int app_reader_open(const char *path, void (*on_exit)(void));
  * to read back and highlight the active choice.
  */
 enum app_text_font app_reader_get_font(void);
+
+/*
+ * The full path (SD mount point included, e.g. "/SD:/books/foo.npb") of
+ * the currently-open book - for toc.c to npb_open() its own, independent
+ * handle on the same file to read its chapter table, without reaching
+ * into reader.c's own book-open/close bracketing. Only valid while a
+ * book is open (i.e. from within a long-press-triggered reader_menu/toc
+ * session) - undefined otherwise.
+ */
+const char *app_reader_get_path(void);
+
+/*
+ * Repositions the currently-open book to the row containing
+ * `text_offset` (a text-blob byte offset - a struct npb_chapter's own
+ * text_offset field, or any other value the binary-search primitive
+ * npb_find_row() resolves - see docs/book-format.md) and saves it to the
+ * bookmark sidecar - toc.c's hook for "the user picked a chapter."
+ *
+ * Deliberately does NOT render or refresh the screen itself - toc.c
+ * always calls this immediately before returning control via its own
+ * on_exit chain, which lands back on reopen_reading() (reader.c), and
+ * that already renders+full-refreshes unconditionally to repaint over
+ * whatever the menu/toc screen was showing (needed even when nothing
+ * was repositioned, e.g. the menu's plain "Back to Book"). Rendering
+ * here too would pay that same ~1.8s full-refresh cost twice in a row
+ * for nothing. If a future caller needs the new position visible
+ * without going through that chain, it should render explicitly itself
+ * rather than this function growing an implicit side effect only some
+ * callers want.
+ *
+ * Returns 0 on success, -EINVAL if no book is open, negative errno
+ * otherwise (position left unchanged on failure).
+ */
+int app_reader_jump_to_offset(uint32_t text_offset);
 
 /*
  * Changes the font book content renders in - the hook a future settings

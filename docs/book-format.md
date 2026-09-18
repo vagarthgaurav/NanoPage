@@ -215,11 +215,53 @@ compression.
   flashing by rendering the generated arrays back through `text.c`'s exact
   bit convention and comparing pixel-for-pixel against the source BDF.
 
-Not yet built: chapter navigation/jump, the explicit-bookmark slots
-(`NPB_MAX_BOOKMARKS`), and any actual settings-menu UI to call
-`app_reader_set_font()` — button mapping for a menu is still an open
-question, since Prev/Next/Action are already fully committed to paging and
-closing while a book is open. How the reader hooks into `power.c`'s
-idle-timeout/System-OFF path (which today unmounts the SD card
-unconditionally with no "notify the active screen first" hook) is also
-still open.
+- **Chapter navigation/jump**, added 2026-09-18. The Prev/Next/Action
+  button-mapping conflict noted above (all three already committed to
+  paging/closing while a book is open) is solved with a hold gesture
+  instead of a fourth button: `nanopage.dts` wraps the Action button in
+  Zephyr's in-tree `zephyr,input-longpress` pseudo-device
+  (`subsys/input/input_longpress.c`), which re-emits either the same
+  code on a short press (< 500ms - what `buttons.c` now treats as the
+  real Action press everywhere, not the raw gpio-keys event, so every
+  screen's Action now dispatches on release rather than press) or a
+  distinct `INPUT_KEY_MENU` code on a long press (>= 500ms). `reader.c`
+  registers a long-press callback (`buttons.h`'s
+  `app_buttons_set_long_press_callback()`) only while a book is open,
+  opening `Firmware/src/ui/reader_menu.c`/`.h` - an in-book menu (same
+  cursor/list convention as `menu.c`/`browser.c`) with three entries:
+  "Back to Book", "Table of Contents", and "Bookmarks" (present but
+  currently a no-op selection - reserved for the explicit-bookmark-slot
+  work below, not yet implemented). "Table of Contents" opens
+  `Firmware/src/ui/toc.c`/`.h`, which loads the open book's
+  `struct npb_chapter` table (via new `npb_read_chapter()` in
+  `npb.c`/`.h`, and `struct npb_book` gaining `chapter_table_offset`/
+  `chapter_count`) into a scrollable list (synthetic "Back" entry pinned
+  at index 0, same idea as `browser.c`'s ".."), same
+  cursor/scroll-page/full-refresh-every-N-moves convention as
+  `browser.c`'s directory listing. Selecting a chapter calls new
+  `app_reader_jump_to_offset()` in `reader.c` (resolves the chapter's
+  `text_offset` to a row via the existing `npb_find_row()` binary search,
+  updates position, saves the bookmark sidecar) and returns straight to
+  reading - deliberately does *not* render/refresh itself, since the
+  return path (`reader.c`'s `reopen_reading()`) always repaints
+  unconditionally anyway (needed even for the menu's plain "Back to
+  Book"); doing both would pay the ~1.8s full-refresh cost twice per
+  jump. `main.c`'s header-label priority chain gained
+  `app_reader_menu_is_active()`/`app_toc_is_active()` branches so the
+  once-a-minute clock tick doesn't stomp the header back to the
+  browser's last path while either screen is up. Verified on real
+  hardware 2026-09-18: clean build/flash/boot (RTT capture confirmed the
+  short-press filtering - a raw `dev=buttons` Action press+release
+  followed by the corresponding `dev=longpress` echo, correctly
+  dispatching exactly once); the long-press-to-menu gesture and TOC
+  jump itself still need a live physical hold-Action test, not yet
+  captured.
+
+Not yet built: the explicit-bookmark slots (`NPB_MAX_BOOKMARKS` - the
+reader menu's "Bookmarks" entry above is wired for this but currently
+inert) and any actual settings-menu UI to call `app_reader_set_font()`
+(separate from the new reader menu above - `settings.c` already exists
+and is reachable from the app menu, not the in-book one). How the reader
+hooks into `power.c`'s idle-timeout/System-OFF path (which today unmounts
+the SD card unconditionally with no "notify the active screen first"
+hook) is also still open.
