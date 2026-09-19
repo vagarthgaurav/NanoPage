@@ -165,6 +165,15 @@ static int session_marker_path(char *out, size_t out_size, bool create_dir)
 	return (ret < 0 || (size_t)ret >= out_size) ? -ENAMETOOLONG : 0;
 }
 
+static void clear_session_marker(void)
+{
+	char path[APP_SD_MAX_PATH_LEN + sizeof(APP_READER_BMK_DIR) + 24];
+
+	if (session_marker_path(path, sizeof(path), false) == 0) {
+		fs_unlink(path);
+	}
+}
+
 static void flush_pending_state(void)
 {
 	char path[APP_SD_MAX_PATH_LEN + sizeof(APP_READER_BMK_DIR) + 24];
@@ -186,8 +195,8 @@ static void flush_pending_state(void)
 				fs_close(&f);
 			}
 		}
-	} else if (session_marker_path(path, sizeof(path), false) == 0) {
-		fs_unlink(path);
+	} else {
+		clear_session_marker();
 	}
 
 	app_sd_deinit();
@@ -320,6 +329,7 @@ static void close_reader(void)
 
 	if (app_sd_init() == 0) {
 		save_bookmark();
+		clear_session_marker();
 		app_sd_deinit();
 	}
 
@@ -635,6 +645,7 @@ void app_reader_set_font(enum app_text_font font)
 			app_buttons_set_long_press_callback(NULL);
 			app_buttons_set_combo_callback(NULL);
 			app_power_set_idle_hook(NULL);
+			clear_session_marker();
 			app_sd_deinit();
 			return;
 		}
