@@ -12,11 +12,6 @@
 #include "text.h"
 #include "toc.h"
 
-/* Row layout - a plain cursor + name list, no per-entry type icon (unlike
- * browser.c/menu.c's folder/file or app icons): every entry here is a
- * menu action, not a typed object, so a second icon column wouldn't add
- * information - the freed columns go to name width instead.
- */
 #define APP_READER_MENU_CURSOR_COL 0
 #define APP_READER_MENU_NAME_COL   3
 
@@ -37,11 +32,6 @@ static const struct reader_menu_entry entries[] = {
 
 #define APP_READER_MENU_ENTRY_COUNT ARRAY_SIZE(entries)
 
-/* Set once per app_reader_menu_show() call, handed straight through to
- * toc.c unchanged (see reader_menu.h's top comment - there's only ever
- * one exit path back to reading, regardless of how many menu levels deep
- * the user went).
- */
 static void (*exit_cb)(void);
 
 static size_t selected_index;
@@ -74,9 +64,6 @@ static void draw_cursor(uint16_t row, bool show)
 	}
 }
 
-/* Three entries always fit on one page (same reasoning as menu.c's own
- * redraw()) - no scrolling logic needed here, unlike toc.c's.
- */
 static void redraw(void)
 {
 	for (uint16_t row = content_start_row; row < content_start_row + content_rows; row++) {
@@ -119,18 +106,6 @@ static void launch_back(void)
 	exit_cb();
 }
 
-/*
- * toc.c/bookmarks.c's "Back" hook (their own on_back, not this menu's
- * own launch_back() above) - redisplays this same menu, with the same
- * exit_cb it already has, rather than jumping straight back to reading.
- * That's the whole point of this indirection: without it, toc.c/
- * bookmarks.c's "Back" would have nothing to return to but exit_cb
- * itself (reader.c's reopen_reading()), skipping this menu entirely -
- * which is what the very first version of this screen did, before
- * anyone noticed it meant "Back" inside the chapter list or bookmark
- * list dumped you straight into the book instead of back to the menu
- * you came from.
- */
 static void return_to_menu(void)
 {
 	app_reader_menu_show(exit_cb);
@@ -177,10 +152,6 @@ void app_reader_menu_show(void (*on_exit)(void))
 	redraw();
 	app_header_update("Menu", false);
 
-	/* Always a full refresh - opening this menu is an infrequent,
-	 * deliberate transition (same reasoning as menu.c's own
-	 * app_menu_show()), not an ordinary page turn.
-	 */
 	app_text_full_refresh();
 
 	app_buttons_set_press_callback(on_button);

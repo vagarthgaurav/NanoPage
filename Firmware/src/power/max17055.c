@@ -1,22 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/*
- * From-scratch MAX17055 driver - see max17055.h for the design rationale
- * (why this isn't Zephyr's in-tree "maxim,max17055" driver: that one's
- * init() runs automatically at POST_KERNEL and unconditionally does a
- * basic EZ-config on every POR, with no hook to check flash for
- * previously-learned parameters first - see drivers/sensor/maxim/
- * max17055/max17055.c in the Zephyr tree, max17055_gauge_init()).
- *
- * Register addresses and the init/save/restore sequences below come from
- * Maxim's MAX17055 Software Implementation Guide (docs/
- * max17055-software-implementation-guide.pdf, UG6365 Rev 2), "Option 2:
- * Custom Short INI without OCV table" and the save/restore-learned-
- * parameters procedure (sections 4.5-4.11). Conversion factors (Table 1,
- * "Register LSBs") are cross-checked against Zephyr's in-tree driver's
- * current_to_ma()/capacity_to_ma() helpers, which use the same formulas.
- */
-
 #define DT_DRV_COMPAT nanopage_max17055
 
 #include <zephyr/device.h>
@@ -98,10 +81,6 @@ static int reg_write(const struct device *dev, uint8_t reg, uint16_t val)
 	return i2c_write_dt(&cfg->i2c, buf, sizeof(buf));
 }
 
-/* WriteAndVerifyRegister() from the software implementation guide: some
- * registers are updated internally by the chip at the same time the host
- * writes them, so a single write can silently collide. Retry a few times.
- */
 static int reg_write_verify(const struct device *dev, uint8_t reg, uint16_t val)
 {
 	for (int attempt = 0; attempt < 3; attempt++) {
@@ -238,12 +217,6 @@ int max17055_configure(const struct device *dev, const struct max17055_learned_p
 		goto unlock;
 	}
 
-	/*
-	 * Board-specific: THRM is unconnected (no external NTC), but ETHRM
-	 * (Config bit 4) defaults to 1 at POR regardless of TSel, so the
-	 * chip periodically drives the THRM bias switch into an open pin.
-	 * Clear it, leaving every other POR-default Config bit untouched.
-	 */
 	uint16_t config_reg;
 
 	ret = reg_read(dev, REG_CONFIG, &config_reg);
@@ -388,15 +361,6 @@ int max17055_force_full(const struct device *dev)
 		return ret;
 	}
 
-	/* RepCap and FullCapRep share the same capacity register format (5
-	 * uVh/Rsense per LSB - see mah_to_reg()/reg_to_mah() above), so this
-	 * is a raw passthrough with no unit conversion, same as the
-	 * FullCapRep write in max17055_restore_capacity() above. Setting
-	 * FullCapRep equal to RepCap is exactly what this chip's own
-	 * automatic "full detection" does internally when it fires - see
-	 * the caller (fuel_gauge.c's app_fuel_gauge_notify_charger_state())
-	 * for why that automatic path can't be relied on here.
-	 */
 	ret = reg_write_verify(dev, REG_FULLCAPREP, rep_cap);
 	app_i2c1_unlock();
 
@@ -482,10 +446,6 @@ static int max17055_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-	/* Deliberately does not touch chip registers here - see the
-	 * top-of-file comment. Configuration happens via max17055_configure(),
-	 * called explicitly by fuel_gauge.c after it has consulted NVS.
-	 */
 	return 0;
 }
 

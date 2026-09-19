@@ -2,16 +2,6 @@
 
 #include "logo_nanopage.h"
 
-/*
- * Auto-generated from Pictures/NanoPage.svg via cairo/rsvg rasterization
- * (519x115 intrinsic -> downscaled to 120px wide, LANCZOS, thresholded to
- * 1-bit, centered in a 296x128 white canvas) then packed into the same
- * vtiled buffer format app_display_refresh_full() expects (display.h) -
- * (height/8) bands, one byte per column, MSB-first, bit=1 -> white.
- * Regenerate by re-running the same pipeline against the SVG if the logo
- * ever changes; nothing here needs hand-editing.
- */
-
 const uint8_t app_logo_nanopage[4736] = {
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,

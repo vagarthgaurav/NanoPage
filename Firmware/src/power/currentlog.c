@@ -12,11 +12,6 @@
 #define APP_CURRENTLOG_PATH "/currentlog.csv"
 #define APP_CURRENTLOG_HEADER "timestamp,instant_current_ma,avg_current_ma,voltage_v\n"
 
-/* Formats a signed microamp current as "-12.345" (mA, 3 decimal places) -
- * same convention as footer.c's own format_current_ma(), duplicated rather
- * than shared since this is a CSV numeric field (no unit suffix), not
- * on-screen text.
- */
 static void format_signed_ma(char *out, size_t len, int32_t current_ua)
 {
 	bool neg = current_ua < 0;
@@ -46,13 +41,6 @@ void app_currentlog_write(int32_t instant_current_ua, int32_t avg_current_ua, in
 		return;
 	}
 
-	/*
-	 * Brackets the card's own power/mount for just this one write - see
-	 * sd.h's usage note on app_sd_init()/app_sd_deinit(). This runs on
-	 * every status-bar tick regardless of whether the browser/reader are
-	 * otherwise touching the card, so without this bracket the logger
-	 * itself would be the reason the card never goes idle.
-	 */
 	if (app_sd_init()) {
 		return; /* no SD card - nothing to log */
 	}
@@ -62,9 +50,6 @@ void app_currentlog_write(int32_t instant_current_ua, int32_t avg_current_ua, in
 		return;
 	}
 
-	/* fs_stat() failing (most likely -ENOENT) means this is the first
-	 * ever write - write a header row once so the file is a plain CSV.
-	 */
 	new_file = (fs_stat(full_path, &stat) != 0);
 
 	fs_file_t_init(&f);

@@ -4,7 +4,6 @@
 
 #include "font_tamzen.h"
 
-/* Generated from tamzen6x12r.bdf: 95 glyphs, 6x16px each, CFB_FONT_MONO_VPACKED (12 bytes/glyph, 1140 bytes total). */
 static const uint8_t cfb_font_tamzen_6x16[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x7c, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x1c, 0x00,
@@ -80,22 +79,6 @@ static const uint8_t cfb_font_tamzen_6x16[] = {
 	0x18, 0x00, 0x00, 0x00,
 };
 
-/*
- * Deliberately NOT registered via FONT_ENTRY_DEFINE (which is
- * STRUCT_SECTION_ITERABLE(cfb_font, ...) under the hood - see cfb.h). That
- * macro links this into the same iterable section Zephyr's built-in fonts
- * (font1016/font1524/font2032, subsys/fb/cfb_fonts.c) populate, and text.c
- * indexes that section *positionally*
- * (font_entry() -> TYPE_SECTION_START(cfb_font)[font]), trusting those
- * three to occupy slots 0/1/2 in that exact order. Which translation
- * unit's entries land where within a linked iterable section is a link-
- * order question - not something this app's CMakeLists.txt controls -
- * so adding a 4th entry into that same section risks silently reordering
- * the existing three instead of just appending. A plain const struct
- * sidesteps that entirely: text.c's font_entry() reaches this one by
- * name for APP_TEXT_FONT_TAMZEN, and the built-in three keep their
- * positional indices exactly as before.
- */
 const struct cfb_font font_tamzen_6x16 = {
 	.data = cfb_font_tamzen_6x16,
 	.caps = CFB_FONT_MONO_VPACKED,
@@ -105,19 +88,6 @@ const struct cfb_font font_tamzen_6x16 = {
 	.last_char = 126,
 };
 
-/*
- * Generated from Tamzen8x16r.bdf - Tamzen's native 8x16 size (see
- * docs/book-format.md's NPB_FONT_TAMZEN_MEDIUM), no bottom-padding needed
- * unlike the 6x16 font above, since 16px is already this glyph's real
- * height (FONTBOUNDINGBOX 8 16 0 -4 in the source BDF). A handful of
- * glyphs (e.g. 'O') overshoot the bounding box by one row for optical
- * correction - the conversion clips that row rather than growing the
- * cell, same as any fixed-cell bitmap font bake would. Independently
- * verified before ever flashing by rendering both the source BDF and this
- * generated array back through text.c's exact CFB_FONT_MONO_VPACKED bit
- * convention and comparing them pixel-for-pixel (matches the same
- * discipline used for font_tamzen_6x16 and font_siji_icons above).
- */
 static const uint8_t cfb_font_tamzen_8x16[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfc, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -225,16 +195,6 @@ const struct cfb_font font_tamzen_8x16 = {
 	.last_char = 126,
 };
 
-/*
- * Generated from Tamzen10x20r.bdf: Tamzen's native 10x20 size, bottom-
- * padded to 24px (4 blank rows appended below the glyph) since
- * CFB_FONT_MONO_VPACKED needs the height to be a multiple of 8 - same
- * padding convention as font_tamzen_6x16 above. Independently verified
- * before ever flashing the same way as font_tamzen_8x16 above (rendered
- * both the source BDF's native 20-row glyph plus the 4 appended blank
- * rows, and this generated array, back through text.c's exact
- * CFB_FONT_MONO_VPACKED bit convention, and compared them pixel-for-pixel).
- */
 static const uint8_t cfb_font_tamzen_10x24[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

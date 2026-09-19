@@ -20,40 +20,6 @@ static const struct device *const fg_dev = DEVICE_DT_GET(DT_NODELABEL(fuel_gauge
 static struct nvs_fs nvs;
 static bool nvs_ready;
 
-/*
- * Compiled-in factory defaults: the learned impedance-track parameters
- * read off the bench unit after it had accumulated real cycling history,
- * baked in as the starting point for every *new* device flashed with a
- * *new* (never-before-used) battery of the same model - a better initial
- * guess than letting the chip characterize from scratch on every first
- * boot, since every NanoPage ships with the same battery.
- *
- * TODO: not yet captured. Until this is filled in (and FACTORY_VALID
- * flipped to 1), app_fuel_gauge_init() falls back to passing NULL learned
- * params to max17055_configure() on a fresh device - i.e. plain EZ-config
- * behavior, the chip characterizes from scratch. To capture real values:
- * flash this firmware, let the bench unit run for a bit, read the RCOMP0/
- * TempCo/FullCapRep/FullCapNom/Cycles values logged by
- * app_fuel_gauge_init() over RTT, paste them in below, flip FACTORY_VALID
- * to 1, and reflash.
- */
-/*
- * APP_CHARGE_COMPLETE_VOLTAGE_MV (config.h): used to confirm a
- * charging->not-charging STAT transition really means "charge completed"
- * rather than "USB unplugged mid-charge" - both produce the identical
- * STAT transition (see charger.c's own comment on STAT's HIGH meaning
- * "complete or disabled"). VSET (R6 = 27k, this board's
- * `desired-voltage = <4200>`) regulates the charge voltage to 4.20V, and
- * the CV-phase taper that precedes a real termination event holds the
- * cell close to that point for the whole taper (R11's 10mOhm sense
- * resistor drops only ~3mV even at the full 300mA charge current, so
- * this isn't measuring a loaded/sagged rail) - a genuine completion is
- * reliably well above this threshold. Unplugging early instead leaves
- * the cell resting at whatever voltage its actual SOC corresponds to,
- * which for Li-ion doesn't approach 4.1V until deep into the high-80s/
- * 90s percent, so this cleanly separates the two cases.
- */
-
 #define FACTORY_VALID 0
 static const struct max17055_learned_params factory_defaults = {
 	.rcomp0 = 0,
@@ -119,10 +85,6 @@ int app_fuel_gauge_init(void)
 		return -ENODEV;
 	}
 
-	/* Not fatal if this fails (e.g. flash somehow unavailable) - the
-	 * fuel gauge still works, it just can't persist/restore learned
-	 * parameters across a battery disconnect.
-	 */
 	(void)nvs_init_once();
 
 	ret = max17055_check_por(fg_dev, &por);
@@ -172,11 +134,6 @@ int app_fuel_gauge_init(void)
 		}
 	}
 
-	/* Always log the chip's current learned params, POR or not - this is
-	 * how to read real numbers off a bench unit to seed FACTORY_* above
-	 * (see the TODO up top), and is generally useful for watching the
-	 * impedance-track model evolve over time via RTT.
-	 */
 	struct max17055_learned_params now;
 
 	if (max17055_read_learned_params(fg_dev, &now) == 0) {
@@ -187,32 +144,6 @@ int app_fuel_gauge_init(void)
 
 	return 0;
 }
-
-/*
- * app_fuel_gauge_notify_charger_state()'s max17055_force_full() call gets
- * the chip very close to 100% but, observed on real hardware, not always
- * exactly there - it settles at a flat, stable ~99.0% rather than 100.0%
- * (not a decaying/self-discharge artifact - the gap doesn't move over time
- * at idle, and it isn't a display-rounding bug either - reg_to_percent_x10()
- * only loses sub-0.1% precision, and the force-full write itself is a raw
- * register passthrough with no unit conversion to lose a whole percent in).
- * Most likely explanation: RepSOC isn't a bare, instantaneously-recomputed
- * RepCap/FullCapRep ratio - Maxim's own internal full-detection sequence
- * (which this app-level charger-STAT-driven trigger stands in for, since
- * it needs the undocumented "End-of-Charge Detection" section of the
- * MAX17055 User Guide, not available in docs/) likely also realigns the
- * mixing/convergence state in ways a single FullCapRep write can't
- * reproduce exactly.
- *
- * Rather than chase that further with more speculative register writes,
- * this holds the *displayed* percentage at 100% for a short margin below
- * the observed near-full reading, using the charger's STAT-confirmed
- * completion as ground truth instead of the chip's own (slightly short)
- * SOC computation. It self-clears the moment real usage drags the measured
- * SOC out of that margin, so it can never mask more than a few percent of
- * genuine depletion. Margin value: APP_CHARGE_FULL_DISPLAY_MARGIN_X10
- * (config.h).
- */
 
 static bool charge_full_latched;
 

@@ -61,10 +61,6 @@ int npb_open(const char *path, enum app_text_font font, struct npb_book *book)
 		goto err;
 	}
 
-	/* Match by `font`'s own glyph size/column count, not a hardcoded
-	 * font_id and not whatever font happens to be globally active - see
-	 * npb.h's top comment.
-	 */
 	app_text_font_info(font, &glyph_width, &glyph_height, &cols);
 
 	for (uint32_t i = 0; i < header.variant_count && !found; i++) {

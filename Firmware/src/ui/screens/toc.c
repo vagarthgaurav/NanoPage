@@ -14,27 +14,12 @@
 #include "text.h"
 #include "toc.h"
 
-/* Row layout - same cursor/name convention as reader_menu.c (no
- * per-entry type icon; every entry here is either the synthetic "Back"
- * or a chapter, and neither needs one).
- */
 #define APP_TOC_CURSOR_COL 0
 #define APP_TOC_NAME_COL   3
 
-/* Chapters + the synthetic "Back" entry pinned at index 0, capped so the
- * whole list fits in one static array rather than needing dynamic
- * allocation for an arbitrarily long chapter table - same reasoning as
- * APP_BROWSER_MAX_ENTRIES in browser.c. A book with more real chapters
- * than this just has its tail silently dropped from the list (still
- * fully readable by paging normally - this only limits jump targets).
- */
 #define APP_TOC_MAX_CHAPTERS 63
 #define APP_TOC_MAX_ENTRIES  (APP_TOC_MAX_CHAPTERS + 1)
 
-/* Matches struct npb_chapter.title (npb_format.h) - NUL-padded on disk
- * but not guaranteed NUL-terminated if all 64 bytes are real title
- * characters, hence the +1 here.
- */
 #define APP_TOC_TITLE_LEN 64
 
 struct toc_entry {
@@ -48,10 +33,6 @@ static size_t entry_count;
 static size_t selected_index;
 static size_t scroll_offset;
 
-/* Set once per app_toc_show() call - see toc.h's own doc comment on the
- * two-callback split: on_back_cb returns to the in-book menu ("Back"),
- * on_selected_cb returns straight to reading (an actual chapter jump).
- */
 static void (*on_back_cb)(void);
 static void (*on_selected_cb)(void);
 
@@ -64,14 +45,6 @@ static bool toc_active;
 
 static void on_button(enum app_button button);
 
-/*
- * Loads the currently-open book's chapter table into `entries`, brackets
- * its own app_sd_init()/app_sd_deinit() (same convention as browser.c's
- * load_dir()) - a fresh npb_open() handle, independent of reader.c's own
- * (which stays closed between actions - see reader.c's render_page()
- * doc comment). An empty/absent chapter table (book.chapter_count == 0)
- * isn't an error - entries[] just ends up with only the "Back" row.
- */
 static int load_chapters(void)
 {
 	struct npb_book book;
@@ -132,9 +105,6 @@ static void draw_name(uint16_t row, const char *name)
 	}
 }
 
-/* `page_row` is 0-based within the visible content area - see browser.c's
- * identical convention for why (keeps scroll_offset math in one place).
- */
 static void draw_entry(uint16_t page_row, size_t idx)
 {
 	uint16_t row = content_start_row + page_row;
@@ -236,10 +206,6 @@ static void select_entry(void)
 
 		if (ret) {
 			printk("toc: failed to jump to chapter (%d)\n", ret);
-			/* Position unchanged (see app_reader_jump_to_offset()'s
-			 * own doc comment) - still leave the screen via the
-			 * same exit path rather than stranding the user here.
-			 */
 		}
 	}
 
@@ -279,19 +245,11 @@ void app_toc_show(void (*on_back)(void), void (*on_selected)(void))
 	content_start_row = APP_HEADER_ROW + 1;
 	content_rows = (rows >= 2) ? (uint16_t)(rows - 2) : 0;
 
-	/* A failed load still shows the screen with just "Back" (entries[0]
-	 * is always set before load_chapters() can fail) rather than
-	 * leaving the user stuck with no button callback at all.
-	 */
 	load_chapters();
 
 	redraw_page();
 	app_header_update("Table of Contents", false);
 
-	/* Always a full refresh - opening this screen is an infrequent,
-	 * deliberate transition, same reasoning as browser.c's own
-	 * folder-navigation full refresh.
-	 */
 	app_text_full_refresh();
 	partial_count = 0;
 

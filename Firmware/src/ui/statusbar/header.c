@@ -11,16 +11,6 @@
 #include "rtc.h"
 #include "text.h"
 
-/*
- * Right-cluster layout (charging icon -> percentage -> battery icon,
- * right-aligned to the screen edge) is built in column units even though
- * the icons are pixel-positioned: font_siji.h's icons are 12px wide, which
- * happens to be an exact multiple of Tamzen's 6px cell width (2 columns),
- * so laying everything out in columns and converting to pixels only at the
- * two app_text_draw_icon() calls keeps icon and text edges aligned without
- * any fractional-pixel bookkeeping. 1 column of gap is left between each
- * element (icon/percent/icon) purely for visual breathing room.
- */
 #define APP_HEADER_ELEMENT_GAP_COLS 1
 #define APP_HEADER_ICON_COLS        2 /* 12px icon / 6px cell width */
 
@@ -31,20 +21,11 @@ static void draw_str(uint16_t row, uint16_t col, const char *str, size_t len)
 	}
 }
 
-/* Last-drawn state, for app_header_update()'s change check. have_last is
- * false until the first successful draw, so that first call always redraws
- * regardless of what these happen to be initialized to.
- */
 static bool have_last;
 static char last_date_buf[24];
 static uint8_t last_percent;
 static bool last_charging;
 static bool last_bookmarked;
-/* Sized independently of sd.h's APP_SD_MAX_PATH_LEN - this only needs to
- * hold whatever `folder` the caller (browser.c) passes, and comparing the
- * full string (not the truncated on-screen version) is what actually
- * tells us the folder changed.
- */
 static char last_folder[128];
 
 int app_header_update(const char *folder, bool bookmarked)
@@ -52,11 +33,6 @@ int app_header_update(const char *folder, bool bookmarked)
 	struct rtc_time now;
 	struct max17055_data_snapshot snap;
 	uint16_t cols, rows;
-	/* Real output is always exactly 14 chars + NUL ("dd/mm/yy HH:mm") -
-	 * oversized so GCC's format-truncation check (which assumes each
-	 * %02d field's full int range, not struct rtc_time's documented
-	 * bounds) doesn't warn.
-	 */
 	char date_buf[24];
 	char percent_buf[8];
 	size_t date_len, percent_len, folder_len, folder_max;
@@ -70,12 +46,6 @@ int app_header_update(const char *folder, bool bookmarked)
 		return ret;
 	}
 
-	/* Each field masked to % 100 so GCC's format-truncation check can see
-	 * a 2-digit bound from the value itself, not just int's full range -
-	 * struct rtc_time's documented field ranges already guarantee this
-	 * (tm_mday <= 31, tm_mon <= 11, tm_hour <= 23, tm_min <= 59), the mask
-	 * is only to make that visible to the compiler.
-	 */
 	snprintf(date_buf, sizeof(date_buf), "%02d/%02d/%02d %02d:%02d", now.tm_mday % 100,
 		 (now.tm_mon + 1) % 100, (now.tm_year + 1900) % 100, now.tm_hour % 100,
 		 now.tm_min % 100);
@@ -89,10 +59,6 @@ int app_header_update(const char *folder, bool bookmarked)
 	percent = (uint8_t)(snap.soc_x10 / 10);
 	charging = app_charger_is_charging();
 
-	/* strcmp instead of comparing individual date/time fields - simpler,
-	 * and the formatted string is exactly what's visible, so a mismatch
-	 * here means something the user would actually see changed.
-	 */
 	if (have_last && strcmp(date_buf, last_date_buf) == 0 && percent == last_percent &&
 	    charging == last_charging && bookmarked == last_bookmarked &&
 	    strncmp(folder, last_folder, sizeof(last_folder)) == 0) {
@@ -108,22 +74,10 @@ int app_header_update(const char *folder, bool bookmarked)
 
 	app_text_get_grid(&cols, &rows);
 
-	/* Blank the whole row first - every element below only draws its own
-	 * cells, so anything from a previous draw (e.g. a longer folder name)
-	 * would otherwise linger.
-	 */
 	app_text_draw_row(APP_HEADER_ROW, "");
 
 	date_col = (cols > date_len) ? (int)(cols - date_len) / 2 : 0;
 
-	/*
-	 * Bookmark icon takes over the exact spot the folder name would
-	 * otherwise occupy - reader.c always passes an empty `folder`
-	 * alongside `bookmarked` (no folder path is meaningful while
-	 * reading a book), so there's nothing to truncate around here;
-	 * every other caller always passes bookmarked=false and lands on
-	 * the folder-text path exactly as before this parameter existed.
-	 */
 	if (bookmarked) {
 		app_text_draw_icon(APP_HEADER_ROW, app_text_col_to_px(0), APP_TEXT_ICON_BOOKMARK);
 	} else {
@@ -147,11 +101,6 @@ int app_header_update(const char *folder, bool bookmarked)
 	}
 	draw_str(APP_HEADER_ROW, (uint16_t)percent_col, percent_buf, percent_len);
 
-	/* BQ25170 STAT (charger.c) - the charger's own status line, not the
-	 * fuel gauge's measured current direction, so the icon stays correct
-	 * even once charge current tapers to ~0 near full (current-sign would
-	 * drop out there even though USB is still connected).
-	 */
 	if (charging) {
 		charging_col = percent_col - APP_HEADER_ELEMENT_GAP_COLS - APP_HEADER_ICON_COLS;
 		if (charging_col >= 0) {
@@ -161,16 +110,10 @@ int app_header_update(const char *folder, bool bookmarked)
 		}
 	}
 
-	/* Round to the nearest of the 9 fill levels rather than always
-	 * flooring, so e.g. 95% shows a full icon instead of one level down.
-	 */
 	level = (uint8_t)((percent * (APP_TEXT_ICON_BATTERY_LEVELS - 1) + 50) / 100);
 	app_text_draw_icon(APP_HEADER_ROW, app_text_col_to_px((uint16_t)battery_col),
 			    (enum app_text_icon)(APP_TEXT_ICON_BATTERY_MIN + level));
 
-	/* Separator rule along the row's bottom pixel line - shares row 0's
-	 * dirty tracking/flush instead of needing a grid row of its own.
-	 */
 	app_text_draw_hline(APP_HEADER_ROW, app_text_row_height() - 1, true);
 
 	return 1;

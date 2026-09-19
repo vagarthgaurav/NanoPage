@@ -12,13 +12,6 @@
 #include "settings.h"
 #include "text.h"
 
-/* Row layout, in text-grid columns - same convention as browser.c's listing
- * (a menu entry and a directory entry are both "an icon plus a name"):
- *   col 0-1: cursor icon (blank unless this is the selected row)
- *   col 2-3: app icon
- *   col 4:   gap
- *   col 5..: app name
- */
 #define APP_MENU_CURSOR_COL    0
 #define APP_MENU_ICON_COL      2
 #define APP_MENU_NAME_COL      5
@@ -71,9 +64,6 @@ static void draw_cursor(uint16_t row, bool show)
 	}
 }
 
-/* Every entry fits on one page (only two exist, well under any font's
- * content_rows) - no scrolling logic needed, unlike browser.c's listing.
- */
 static void redraw(void)
 {
 	for (uint16_t row = content_start_row; row < content_start_row + content_rows; row++) {
@@ -112,12 +102,6 @@ static void move_cursor(int delta)
 
 static void launch_browser(void)
 {
-	/* app_menu_show() is passed as the browser's on_exit - selecting the
-	 * SD root's synthetic ".." entry (browser.h) comes straight back
-	 * here. On failure (no SD card), the browser never registered its
-	 * own button callback (see browser.c), so ours is still live -
-	 * nothing to undo, just stay on the menu.
-	 */
 	if (app_browser_init("/", app_menu_show) == 0) {
 		menu_active = false;
 	} else {
@@ -157,11 +141,6 @@ void app_menu_show(void)
 	redraw();
 	app_header_update("Apps", false);
 
-	/* Always a full refresh - this only ever runs at boot or when
-	 * returning from another app (an infrequent, deliberate transition,
-	 * same reasoning as browser.c's folder-navigation full refresh), so
-	 * there's no partial-refresh counter here to keep.
-	 */
 	app_text_full_refresh();
 
 	app_buttons_set_press_callback(on_button);

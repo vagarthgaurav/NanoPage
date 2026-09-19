@@ -14,10 +14,6 @@ struct text_size_option {
 	enum app_text_font font;
 };
 
-/* The three sizes npb_format.h's enum npb_font_id defines - see
- * app_reader_set_font()'s own doc comment in reader.h for why no other
- * app_text_font value makes sense here.
- */
 static const struct text_size_option text_sizes[] = {
 	{"Small", APP_TEXT_FONT_TAMZEN},
 	{"Medium", APP_TEXT_FONT_TAMZEN_MEDIUM},
@@ -67,11 +63,6 @@ static void change_text_size(int delta)
 		text_size_index++;
 	}
 
-	/* Applied immediately, same as the rest of this app's settings-free
-	 * UI (nothing here has a separate "save" step) - if a book is
-	 * currently open, app_reader_set_font() re-renders its current page
-	 * at the new size right away.
-	 */
 	app_reader_set_font(text_sizes[text_size_index].font);
 
 	draw();
@@ -116,10 +107,6 @@ void app_settings_init(void (*on_exit)(void))
 	app_text_get_grid(&grid_cols, &rows);
 	content_start_row = APP_HEADER_ROW + 1;
 
-	/* Blank the whole content area first (same convention as
-	 * usb_msc.c's draw_message()) so a shorter draw() than whatever
-	 * screen was showing before fully replaces it.
-	 */
 	for (uint16_t row = content_start_row; row + 1 < rows; row++) {
 		app_text_draw_row(row, "");
 	}

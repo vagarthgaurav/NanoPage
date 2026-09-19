@@ -29,11 +29,6 @@ void app_footer_sample_current(void)
 	}
 }
 
-/* Formats a signed microamp current as "-12.345mA" (3 decimal places -
- * the ADC's own LSB is 156.25uA for this board's 10mOhm sense resistor,
- * see reg_to_current_ua() in max17055.c, so whole-mA truncation would
- * throw away the only resolution the chip actually has to offer).
- */
 static void format_current_ma(char *out, size_t len, int32_t current_ua)
 {
 	bool neg = current_ua < 0;
@@ -70,10 +65,6 @@ int app_footer_draw(void)
 	last_reading.voltage_uv = snap.voltage_uv;
 	last_reading.soc_x10 = snap.soc_x10;
 
-	/* Bottom-aligned so the footer's text sits flush against the panel's
-	 * physical bottom edge instead of leaving Tamzen's 4px bottom-padding
-	 * gap visible below it - see app_text_draw_row_bottom_aligned().
-	 */
 	app_text_draw_row_bottom_aligned(footer_row, buf, FONT_TAMZEN_NATIVE_HEIGHT);
 
 	return 0;
