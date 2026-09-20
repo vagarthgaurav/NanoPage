@@ -8,7 +8,6 @@
 #include "buttons.h"
 #include "charger.h"
 #include "config.h"
-#include "currentlog.h"
 #include "display.h"
 #include "footer.h"
 #include "fuel_gauge.h"
@@ -67,12 +66,6 @@ static void footer_draw_handler(struct k_work *work)
 
 	app_footer_draw();
 	app_text_flush();
-
-	struct app_footer_reading reading;
-
-	app_footer_get_last(&reading);
-	app_currentlog_write(reading.instant_current_ua, reading.avg_current_ua,
-			      reading.voltage_uv);
 
 	if (app_fuel_gauge_should_save_learned_params()) {
 		app_fuel_gauge_save_learned_params();

@@ -11,13 +11,4 @@ void app_footer_sample_current(void);
 
 int app_footer_draw(void);
 
-struct app_footer_reading {
-	int32_t instant_current_ua;
-	int32_t avg_current_ua;
-	int64_t voltage_uv;
-	uint16_t soc_x10;
-};
-
-void app_footer_get_last(struct app_footer_reading *out);
-
 #endif /* APP_FOOTER_H_ */

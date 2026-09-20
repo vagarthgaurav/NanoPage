@@ -10,7 +10,6 @@
 
 static uint16_t footer_row;
 static int32_t last_instant_current_ua;
-static struct app_footer_reading last_reading;
 
 void app_footer_init(void)
 {
@@ -60,17 +59,7 @@ int app_footer_draw(void)
 		 snap.soc_x10 % 10, (int)(snap.voltage_uv / 1000000),
 		 (int)((snap.voltage_uv / 1000) % 1000), inst_buf, avg_buf);
 
-	last_reading.instant_current_ua = last_instant_current_ua;
-	last_reading.avg_current_ua = snap.avg_current_ua;
-	last_reading.voltage_uv = snap.voltage_uv;
-	last_reading.soc_x10 = snap.soc_x10;
-
 	app_text_draw_row_bottom_aligned(footer_row, buf, FONT_TAMZEN_NATIVE_HEIGHT);
 
 	return 0;
-}
-
-void app_footer_get_last(struct app_footer_reading *out)
-{
-	*out = last_reading;
 }
