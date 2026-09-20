@@ -12,6 +12,9 @@ int app_fuel_gauge_init(void);
 
 int app_fuel_gauge_read(struct max17055_data_snapshot *out);
 
+int app_fuel_gauge_read_current_ua(int32_t *current_ua);
+int app_fuel_gauge_read_percent_x10(uint16_t *soc_x10);
+
 int app_fuel_gauge_get_percent(uint8_t *percent);
 int app_fuel_gauge_get_voltage_mv(uint16_t *mv);
 int app_fuel_gauge_get_current_ma(int16_t *ma);

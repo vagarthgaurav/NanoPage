@@ -48,6 +48,10 @@ int max17055_clear_por(const struct device *dev);
 
 int max17055_read_all(const struct device *dev, struct max17055_data_snapshot *out);
 
+int max17055_read_current(const struct device *dev, int32_t *current_ua);
+
+int max17055_read_soc(const struct device *dev, uint16_t *soc_x10);
+
 int max17055_force_full(const struct device *dev);
 
 int max17055_read_learned_params(const struct device *dev, struct max17055_learned_params *out);

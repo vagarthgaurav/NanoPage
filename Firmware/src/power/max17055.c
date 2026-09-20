@@ -396,6 +396,41 @@ unlock:
 	return ret;
 }
 
+int max17055_read_current(const struct device *dev, int32_t *current_ua)
+{
+	const struct max17055_config *cfg = dev->config;
+	uint16_t raw;
+	int ret;
+
+	app_i2c1_lock();
+	ret = reg_read(dev, REG_CURRENT, &raw);
+	app_i2c1_unlock();
+
+	if (ret) {
+		return ret;
+	}
+
+	*current_ua = reg_to_current_ua(cfg, (int16_t)raw);
+	return 0;
+}
+
+int max17055_read_soc(const struct device *dev, uint16_t *soc_x10)
+{
+	uint16_t raw;
+	int ret;
+
+	app_i2c1_lock();
+	ret = reg_read(dev, REG_REPSOC, &raw);
+	app_i2c1_unlock();
+
+	if (ret) {
+		return ret;
+	}
+
+	*soc_x10 = reg_to_percent_x10(raw);
+	return 0;
+}
+
 int max17055_read_all(const struct device *dev, struct max17055_data_snapshot *out)
 {
 	const struct max17055_config *cfg = dev->config;

@@ -172,6 +172,25 @@ int app_fuel_gauge_read(struct max17055_data_snapshot *out)
 	return ret;
 }
 
+int app_fuel_gauge_read_current_ua(int32_t *current_ua)
+{
+	return max17055_read_current(fg_dev, current_ua);
+}
+
+int app_fuel_gauge_read_percent_x10(uint16_t *soc_x10)
+{
+	struct max17055_data_snapshot snap = {0};
+	int ret = max17055_read_soc(fg_dev, &snap.soc_x10);
+
+	if (ret) {
+		return ret;
+	}
+
+	apply_full_charge_latch(&snap);
+	*soc_x10 = snap.soc_x10;
+	return 0;
+}
+
 int app_fuel_gauge_get_percent(uint8_t *percent)
 {
 	struct max17055_data_snapshot snap;

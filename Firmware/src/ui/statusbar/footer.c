@@ -22,10 +22,10 @@ void app_footer_init(void)
 
 void app_footer_sample_current(void)
 {
-	struct max17055_data_snapshot snap;
+	int32_t current_ua;
 
-	if (app_fuel_gauge_read(&snap) == 0) {
-		last_instant_current_ua = snap.current_ua;
+	if (app_fuel_gauge_read_current_ua(&current_ua) == 0) {
+		last_instant_current_ua = current_ua;
 	}
 }
 

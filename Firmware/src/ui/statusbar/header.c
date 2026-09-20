@@ -7,7 +7,6 @@
 #include "fuel_gauge.h"
 #include "font_siji.h"
 #include "header.h"
-#include "max17055.h"
 #include "rtc.h"
 #include "text.h"
 
@@ -31,7 +30,7 @@ static char last_folder[128];
 int app_header_update(const char *folder, bool bookmarked)
 {
 	struct rtc_time now;
-	struct max17055_data_snapshot snap;
+	uint16_t soc_x10;
 	uint16_t cols, rows;
 	char date_buf[24];
 	char percent_buf[8];
@@ -51,12 +50,12 @@ int app_header_update(const char *folder, bool bookmarked)
 		 now.tm_min % 100);
 	date_len = strlen(date_buf);
 
-	ret = app_fuel_gauge_read(&snap);
+	ret = app_fuel_gauge_read_percent_x10(&soc_x10);
 	if (ret) {
 		return ret;
 	}
 
-	percent = (uint8_t)(snap.soc_x10 / 10);
+	percent = (uint8_t)(soc_x10 / 10);
 	charging = app_charger_is_charging();
 
 	if (have_last && strcmp(date_buf, last_date_buf) == 0 && percent == last_percent &&
