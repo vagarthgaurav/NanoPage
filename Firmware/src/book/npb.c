@@ -126,7 +126,7 @@ int npb_read_chapter(struct npb_book *book, uint32_t chapter_index, struct npb_c
 
 int npb_read_text(struct npb_book *book, uint32_t blob_offset, uint8_t length, char *buf)
 {
-	if ((uint32_t)blob_offset + length > book->text_blob_size) {
+	if ((uint64_t)blob_offset + length > book->text_blob_size) {
 		return -EINVAL;
 	}
 
