@@ -43,9 +43,6 @@ static void button_event_cb(struct input_event *evt, void *user_data)
 {
 	ARG_UNUSED(user_data);
 
-	printk("button: dev=%s code=%u %s\n", evt->dev ? evt->dev->name : "?", evt->code,
-	       evt->value ? "pressed" : "released");
-
 	if (evt->value) {
 		app_power_mark_activity();
 	}
