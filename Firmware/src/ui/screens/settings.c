@@ -99,15 +99,14 @@ static void on_button(enum app_button button)
 
 void app_settings_init(void (*on_exit)(void))
 {
-	uint16_t grid_cols, rows;
+	uint16_t content_rows;
 
 	exit_cb = on_exit;
 	text_size_index = font_to_index(app_reader_get_font());
 
-	app_text_get_grid(&grid_cols, &rows);
-	content_start_row = APP_HEADER_ROW + 1;
+	app_text_get_content_rows(&content_start_row, &content_rows);
 
-	for (uint16_t row = content_start_row; row + 1 < rows; row++) {
+	for (uint16_t row = content_start_row; row < content_start_row + content_rows; row++) {
 		app_text_draw_row(row, "");
 	}
 

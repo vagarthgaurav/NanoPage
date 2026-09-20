@@ -297,8 +297,7 @@ static int browser_open(const char *root)
 	if (rows < 3) {
 		return -ENOSPC;
 	}
-	content_start_row = APP_HEADER_ROW + 1;
-	content_rows = rows - 2;
+	app_text_get_content_rows(&content_start_row, &content_rows);
 
 	app_list_widget_init(&list, draw_entry, NULL, APP_BROWSER_CURSOR_COL, content_start_row,
 			      content_rows);

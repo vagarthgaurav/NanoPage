@@ -23,6 +23,8 @@ int app_text_set_font(enum app_text_font font);
 
 void app_text_get_grid(uint16_t *cols, uint16_t *rows);
 
+void app_text_get_content_rows(uint16_t *start_row, uint16_t *rows);
+
 void app_text_font_info(enum app_text_font font, uint16_t *glyph_width, uint16_t *glyph_height,
 			 uint16_t *cols);
 

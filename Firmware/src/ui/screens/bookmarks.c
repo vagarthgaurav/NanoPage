@@ -250,8 +250,7 @@ void app_bookmarks_show(void (*on_back)(void), void (*on_selected)(void))
 	on_selected_cb = on_selected;
 
 	app_text_get_grid(&grid_cols, &rows);
-	content_start_row = APP_HEADER_ROW + 1;
-	content_rows = (rows >= 2) ? (uint16_t)(rows - 2) : 0;
+	app_text_get_content_rows(&content_start_row, &content_rows);
 
 	app_list_widget_init(&list, draw_entry, NULL, APP_BOOKMARKS_CURSOR_COL, content_start_row,
 			      content_rows);

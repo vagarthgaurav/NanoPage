@@ -8,6 +8,7 @@
 
 #include "display.h"
 #include "font_tamzen.h"
+#include "header.h"
 #include "text.h"
 
 STRUCT_SECTION_START_EXTERN(cfb_font);
@@ -238,6 +239,12 @@ void app_text_get_grid(uint16_t *cols, uint16_t *rows)
 {
 	*cols = grid_cols;
 	*rows = grid_rows;
+}
+
+void app_text_get_content_rows(uint16_t *start_row, uint16_t *rows)
+{
+	*start_row = APP_HEADER_ROW + 1;
+	*rows = (grid_rows >= 2) ? (uint16_t)(grid_rows - 2) : 0;
 }
 
 void app_text_font_info(enum app_text_font font, uint16_t *glyph_width, uint16_t *glyph_height,
