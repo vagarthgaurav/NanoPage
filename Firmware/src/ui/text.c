@@ -426,13 +426,21 @@ int app_text_set_cursor(uint16_t row, uint16_t col, bool visible)
 int app_text_flush(void)
 {
 	uint16_t band = 0;
+	int ret = 0;
+
+	/*
+	 * Bracket the whole multi-run flush in one lock/unlock pair so disjoint
+	 * dirty regions share a single SD power-up instead of each triggering
+	 * its own app_display_lock()-driven SD power cycle (and its 20ms
+	 * settle delay) via app_display_refresh_partial().
+	 */
+	app_display_lock();
 
 	while (band < total_bands) {
 		uint16_t run_start, run_end, x_min, x_max;
 		uint16_t x, w, y, h, nbands;
 		size_t buf_size;
 		uint8_t *tmp;
-		int ret;
 
 		if (!bands_dirty[band].dirty) {
 			band++;
@@ -460,7 +468,8 @@ int app_text_flush(void)
 
 		tmp = k_malloc(buf_size);
 		if (!tmp) {
-			return -ENOMEM;
+			ret = -ENOMEM;
+			break;
 		}
 
 		for (uint16_t b = 0; b < nbands; b++) {
@@ -473,7 +482,7 @@ int app_text_flush(void)
 		k_free(tmp);
 
 		if (ret) {
-			return ret;
+			break;
 		}
 
 		for (uint16_t b = run_start; b < run_end; b++) {
@@ -481,7 +490,9 @@ int app_text_flush(void)
 		}
 	}
 
-	return 0;
+	app_display_unlock();
+
+	return ret;
 }
 
 int app_text_full_refresh(void)
