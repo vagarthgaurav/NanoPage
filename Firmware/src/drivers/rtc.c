@@ -28,9 +28,14 @@ int app_rtc_init(void)
 
 	app_i2c1_lock();
 	ret = rtc_get_time(rtc_dev, &now);
-	if (ret != -ENODATA) {
+	if (ret == 0) {
 		app_i2c1_unlock();
 		return 0;
+	}
+	if (ret != -ENODATA) {
+		app_i2c1_unlock();
+		printk("rtc_get_time failed: %d\n", ret);
+		return ret;
 	}
 
 	struct rtc_time set_time = {
