@@ -10,6 +10,7 @@
 #include "config.h"
 #include "font_siji.h"
 #include "header.h"
+#include "list_widget.h"
 #include "reader.h"
 #include "sd.h"
 #include "text.h"
@@ -28,8 +29,8 @@ struct browser_entry {
 
 static struct browser_entry entries[APP_BROWSER_MAX_ENTRIES];
 static size_t entry_count;
-static size_t selected_index;
-static size_t scroll_offset;
+
+static struct app_list_widget list;
 
 static char current_path[APP_SD_MAX_PATH_LEN] = "/";
 
@@ -44,6 +45,7 @@ static bool browser_ready;
 static void (*exit_cb)(void);
 
 static void on_button(enum app_button button);
+static void draw_entry(uint16_t row, size_t idx, void *user_data);
 
 static bool has_bmk_extension(const char *name)
 {
@@ -113,8 +115,7 @@ static int load_dir(const char *path)
 		qsort(&entries[start], entry_count - start, sizeof(entries[0]), entry_cmp);
 	}
 
-	selected_index = 0;
-	scroll_offset = 0;
+	app_list_widget_reset(&list, entry_count);
 
 	return 0;
 }
@@ -130,9 +131,9 @@ static void draw_name(uint16_t row, const char *name)
 	}
 }
 
-static void draw_entry(uint16_t page_row, size_t idx)
+static void draw_entry(uint16_t row, size_t idx, void *user_data)
 {
-	uint16_t row = content_start_row + page_row;
+	ARG_UNUSED(user_data);
 
 	app_text_draw_row(row, "");
 
@@ -143,30 +144,6 @@ static void draw_entry(uint16_t page_row, size_t idx)
 	app_text_draw_icon(row, app_text_col_to_px(APP_BROWSER_TYPE_ICON_COL),
 			    entries[idx].is_dir ? APP_TEXT_ICON_FOLDER : APP_TEXT_ICON_FILE);
 	draw_name(row, entries[idx].name);
-}
-
-static void draw_cursor(uint16_t page_row, bool show)
-{
-	uint16_t row = content_start_row + page_row;
-
-	if (show) {
-		app_text_draw_icon(row, app_text_col_to_px(APP_BROWSER_CURSOR_COL),
-				    APP_TEXT_ICON_CURSOR);
-	} else {
-		app_text_draw_cell(row, APP_BROWSER_CURSOR_COL, ' ');
-		app_text_draw_cell(row, APP_BROWSER_CURSOR_COL + 1, ' ');
-	}
-}
-
-static void redraw_page(void)
-{
-	for (uint16_t i = 0; i < content_rows; i++) {
-		draw_entry(i, scroll_offset + i);
-	}
-
-	if (entry_count > 0) {
-		draw_cursor((uint16_t)(selected_index - scroll_offset), true);
-	}
 }
 
 static void browser_flush(void)
@@ -183,37 +160,7 @@ static void browser_flush(void)
 
 static void move_cursor(int delta)
 {
-	size_t new_index;
-	uint16_t old_page_row;
-
-	if (entry_count == 0) {
-		return;
-	}
-
-	if (delta < 0) {
-		if (selected_index == 0) {
-			return;
-		}
-		new_index = selected_index - 1;
-	} else {
-		if (selected_index + 1 >= entry_count) {
-			return;
-		}
-		new_index = selected_index + 1;
-	}
-
-	if (new_index < scroll_offset || new_index >= scroll_offset + content_rows) {
-		scroll_offset = (new_index < scroll_offset) ? new_index
-							      : new_index - content_rows + 1;
-		selected_index = new_index;
-		redraw_page();
-	} else {
-		old_page_row = (uint16_t)(selected_index - scroll_offset);
-		draw_cursor(old_page_row, false);
-		selected_index = new_index;
-		draw_cursor((uint16_t)(selected_index - scroll_offset), true);
-	}
-
+	app_list_widget_move_cursor(&list, delta);
 	browser_flush();
 }
 
@@ -241,7 +188,7 @@ static bool has_npb_extension(const char *name)
 static void resume_browser(void)
 {
 	app_buttons_set_press_callback(on_button);
-	redraw_page();
+	app_list_widget_redraw(&list);
 	app_header_update(current_path, false);
 	app_text_full_refresh();
 	partial_count = 0;
@@ -250,21 +197,23 @@ static void resume_browser(void)
 static void enter_selected(void)
 {
 	char new_path[APP_SD_MAX_PATH_LEN];
+	size_t idx;
 	int ret;
 
 	if (entry_count == 0) {
 		return;
 	}
 
-	if (!entries[selected_index].is_dir) {
-		if (!has_npb_extension(entries[selected_index].name)) {
+	idx = app_list_widget_selected_index(&list);
+
+	if (!entries[idx].is_dir) {
+		if (!has_npb_extension(entries[idx].name)) {
 			return;
 		}
 
-		ret = build_child_path(entries[selected_index].name, new_path, sizeof(new_path));
+		ret = build_child_path(entries[idx].name, new_path, sizeof(new_path));
 		if (ret) {
-			printk("browser: path too long, not opening \"%s\"\n",
-			       entries[selected_index].name);
+			printk("browser: path too long, not opening \"%s\"\n", entries[idx].name);
 			return;
 		}
 
@@ -275,7 +224,7 @@ static void enter_selected(void)
 		return;
 	}
 
-	if (entries[selected_index].is_parent) {
+	if (entries[idx].is_parent) {
 		if (strcmp(current_path, "/") == 0) {
 			void (*cb)(void) = exit_cb;
 
@@ -299,10 +248,9 @@ static void enter_selected(void)
 			new_path[len] = '\0';
 		}
 	} else {
-		ret = build_child_path(entries[selected_index].name, new_path, sizeof(new_path));
+		ret = build_child_path(entries[idx].name, new_path, sizeof(new_path));
 		if (ret) {
-			printk("browser: path too long, not entering \"%s\"\n",
-			       entries[selected_index].name);
+			printk("browser: path too long, not entering \"%s\"\n", entries[idx].name);
 			return;
 		}
 	}
@@ -316,7 +264,7 @@ static void enter_selected(void)
 	strncpy(current_path, new_path, sizeof(current_path) - 1);
 	current_path[sizeof(current_path) - 1] = '\0';
 
-	redraw_page();
+	app_list_widget_redraw(&list);
 	app_header_update(current_path, false);
 
 	app_text_full_refresh();
@@ -352,6 +300,9 @@ static int browser_open(const char *root)
 	content_start_row = APP_HEADER_ROW + 1;
 	content_rows = rows - 2;
 
+	app_list_widget_init(&list, draw_entry, NULL, APP_BROWSER_CURSOR_COL, content_start_row,
+			      content_rows);
+
 	strncpy(current_path, root, sizeof(current_path) - 1);
 	current_path[sizeof(current_path) - 1] = '\0';
 
@@ -361,7 +312,7 @@ static int browser_open(const char *root)
 		return ret;
 	}
 
-	redraw_page();
+	app_list_widget_redraw(&list);
 	app_header_update(current_path, false);
 
 	ret = app_text_full_refresh();

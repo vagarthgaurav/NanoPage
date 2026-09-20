@@ -9,6 +9,7 @@
 #include "buttons.h"
 #include "config.h"
 #include "header.h"
+#include "list_widget.h"
 #include "npb.h"
 #include "npb_bookmark_format.h"
 #include "reader.h"
@@ -32,8 +33,8 @@ struct bookmarks_entry {
 
 static struct bookmarks_entry entries[APP_BOOKMARKS_MAX_ENTRIES];
 static size_t entry_count;
-static size_t selected_index;
-static size_t scroll_offset;
+
+static struct app_list_widget list;
 
 static void (*on_back_cb)(void);
 static void (*on_selected_cb)(void);
@@ -46,6 +47,7 @@ static uint8_t partial_count;
 static bool bookmarks_active;
 
 static void on_button(enum app_button button);
+static void draw_entry(uint16_t row, size_t idx, void *user_data);
 
 static bool chapter_title_for_offset(struct npb_book *book, uint32_t offset, char *out,
 				      size_t out_size)
@@ -86,8 +88,6 @@ static int load_bookmarks(void)
 	entry_count = 1;
 
 	if (app_reader_get_bookmarks(raw, ARRAY_SIZE(raw), &raw_count) || raw_count == 0) {
-		selected_index = 0;
-		scroll_offset = 0;
 		return 0;
 	}
 
@@ -151,9 +151,6 @@ static int load_bookmarks(void)
 		app_sd_deinit();
 	}
 
-	selected_index = 0;
-	scroll_offset = 0;
-
 	return 0;
 }
 
@@ -168,9 +165,9 @@ static void draw_name(uint16_t row, const char *name)
 	}
 }
 
-static void draw_entry(uint16_t page_row, size_t idx)
+static void draw_entry(uint16_t row, size_t idx, void *user_data)
 {
-	uint16_t row = content_start_row + page_row;
+	ARG_UNUSED(user_data);
 
 	app_text_draw_row(row, "");
 
@@ -179,30 +176,6 @@ static void draw_entry(uint16_t page_row, size_t idx)
 	}
 
 	draw_name(row, entries[idx].text);
-}
-
-static void draw_cursor(uint16_t page_row, bool show)
-{
-	uint16_t row = content_start_row + page_row;
-
-	if (show) {
-		app_text_draw_icon(row, app_text_col_to_px(APP_BOOKMARKS_CURSOR_COL),
-				    APP_TEXT_ICON_CURSOR);
-	} else {
-		app_text_draw_cell(row, APP_BOOKMARKS_CURSOR_COL, ' ');
-		app_text_draw_cell(row, APP_BOOKMARKS_CURSOR_COL + 1, ' ');
-	}
-}
-
-static void redraw_page(void)
-{
-	for (uint16_t i = 0; i < content_rows; i++) {
-		draw_entry(i, scroll_offset + i);
-	}
-
-	if (entry_count > 0) {
-		draw_cursor((uint16_t)(selected_index - scroll_offset), true);
-	}
 }
 
 static void bookmarks_flush(void)
@@ -219,42 +192,13 @@ static void bookmarks_flush(void)
 
 static void move_cursor(int delta)
 {
-	size_t new_index;
-	uint16_t old_page_row;
-
-	if (entry_count == 0) {
-		return;
-	}
-
-	if (delta < 0) {
-		if (selected_index == 0) {
-			return;
-		}
-		new_index = selected_index - 1;
-	} else {
-		if (selected_index + 1 >= entry_count) {
-			return;
-		}
-		new_index = selected_index + 1;
-	}
-
-	if (new_index < scroll_offset || new_index >= scroll_offset + content_rows) {
-		scroll_offset = (new_index < scroll_offset) ? new_index
-							      : new_index - content_rows + 1;
-		selected_index = new_index;
-		redraw_page();
-	} else {
-		old_page_row = (uint16_t)(selected_index - scroll_offset);
-		draw_cursor(old_page_row, false);
-		selected_index = new_index;
-		draw_cursor((uint16_t)(selected_index - scroll_offset), true);
-	}
-
+	app_list_widget_move_cursor(&list, delta);
 	bookmarks_flush();
 }
 
 static void select_entry(void)
 {
+	size_t idx;
 	bool is_back;
 	void (*cb)(void);
 
@@ -262,10 +206,11 @@ static void select_entry(void)
 		return;
 	}
 
-	is_back = entries[selected_index].is_back;
+	idx = app_list_widget_selected_index(&list);
+	is_back = entries[idx].is_back;
 
 	if (!is_back) {
-		int ret = app_reader_jump_to_offset(entries[selected_index].text_offset);
+		int ret = app_reader_jump_to_offset(entries[idx].text_offset);
 
 		if (ret) {
 			printk("bookmarks: failed to jump to bookmark (%d)\n", ret);
@@ -308,9 +253,13 @@ void app_bookmarks_show(void (*on_back)(void), void (*on_selected)(void))
 	content_start_row = APP_HEADER_ROW + 1;
 	content_rows = (rows >= 2) ? (uint16_t)(rows - 2) : 0;
 
-	load_bookmarks();
+	app_list_widget_init(&list, draw_entry, NULL, APP_BOOKMARKS_CURSOR_COL, content_start_row,
+			      content_rows);
 
-	redraw_page();
+	load_bookmarks();
+	app_list_widget_reset(&list, entry_count);
+
+	app_list_widget_redraw(&list);
 	app_header_update("Bookmarks", false);
 
 	app_text_full_refresh();

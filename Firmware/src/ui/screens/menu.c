@@ -8,6 +8,7 @@
 #include "buttons.h"
 #include "font_siji.h"
 #include "header.h"
+#include "list_widget.h"
 #include "menu.h"
 #include "settings.h"
 #include "text.h"
@@ -32,7 +33,8 @@ static const struct menu_entry entries[] = {
 
 #define APP_MENU_ENTRY_COUNT ARRAY_SIZE(entries)
 
-static size_t selected_index;
+static struct app_list_widget list;
+
 static uint16_t grid_cols;
 static uint16_t content_start_row;
 static uint16_t content_rows;
@@ -40,9 +42,19 @@ static bool menu_active;
 
 static void on_button(enum app_button button);
 
-static void draw_entry(uint16_t row, size_t idx)
+static void draw_entry(uint16_t row, size_t idx, void *user_data)
 {
-	size_t len = strlen(entries[idx].name);
+	size_t len;
+
+	ARG_UNUSED(user_data);
+
+	app_text_draw_row(row, "");
+
+	if (idx >= APP_MENU_ENTRY_COUNT) {
+		return;
+	}
+
+	len = strlen(entries[idx].name);
 
 	app_text_draw_icon(row, app_text_col_to_px(APP_MENU_ICON_COL), entries[idx].icon);
 
@@ -53,50 +65,9 @@ static void draw_entry(uint16_t row, size_t idx)
 	}
 }
 
-static void draw_cursor(uint16_t row, bool show)
-{
-	if (show) {
-		app_text_draw_icon(row, app_text_col_to_px(APP_MENU_CURSOR_COL),
-				    APP_TEXT_ICON_CURSOR);
-	} else {
-		app_text_draw_cell(row, APP_MENU_CURSOR_COL, ' ');
-		app_text_draw_cell(row, APP_MENU_CURSOR_COL + 1, ' ');
-	}
-}
-
-static void redraw(void)
-{
-	for (uint16_t row = content_start_row; row < content_start_row + content_rows; row++) {
-		app_text_draw_row(row, "");
-	}
-
-	for (size_t i = 0; i < APP_MENU_ENTRY_COUNT && i < content_rows; i++) {
-		draw_entry((uint16_t)(content_start_row + i), i);
-	}
-
-	draw_cursor((uint16_t)(content_start_row + selected_index), true);
-}
-
 static void move_cursor(int delta)
 {
-	size_t new_index;
-
-	if (delta < 0) {
-		if (selected_index == 0) {
-			return;
-		}
-		new_index = selected_index - 1;
-	} else {
-		if (selected_index + 1 >= APP_MENU_ENTRY_COUNT) {
-			return;
-		}
-		new_index = selected_index + 1;
-	}
-
-	draw_cursor((uint16_t)(content_start_row + selected_index), false);
-	selected_index = new_index;
-	draw_cursor((uint16_t)(content_start_row + selected_index), true);
-
+	app_list_widget_move_cursor(&list, delta);
 	app_text_flush();
 }
 
@@ -125,7 +96,7 @@ static void on_button(enum app_button button)
 		move_cursor(1);
 		break;
 	case APP_BUTTON_ACTION:
-		entries[selected_index].launch();
+		entries[app_list_widget_selected_index(&list)].launch();
 		break;
 	}
 }
@@ -138,7 +109,10 @@ void app_menu_show(void)
 	content_start_row = APP_HEADER_ROW + 1;
 	content_rows = (rows >= 2) ? (uint16_t)(rows - 2) : 0;
 
-	redraw();
+	app_list_widget_init(&list, draw_entry, NULL, APP_MENU_CURSOR_COL, content_start_row,
+			      content_rows);
+	app_list_widget_reset(&list, APP_MENU_ENTRY_COUNT);
+	app_list_widget_redraw(&list);
 	app_header_update("Apps", false);
 
 	app_text_full_refresh();
