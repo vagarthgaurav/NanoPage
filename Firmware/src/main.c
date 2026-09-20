@@ -64,8 +64,10 @@ static void footer_draw_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
-	app_footer_draw();
-	app_text_flush();
+	if (!app_usb_msc_is_active()) {
+		app_footer_draw();
+		app_text_flush();
+	}
 
 	if (app_fuel_gauge_should_save_learned_params()) {
 		app_fuel_gauge_save_learned_params();
