@@ -378,6 +378,21 @@ static void turn_page(int direction)
 	save_bookmark();
 }
 
+/* Disables all reader input/power hooks and marks the reader closed. Shared
+ * by every path that gives up on the current reading session - close_reader()
+ * and app_reader_set_font()'s revert-failed fallback - so they unwind with
+ * the same shape instead of each hand-rolling their own subset of resets.
+ */
+static void teardown_reader_hooks(void)
+{
+	book_open = false;
+
+	app_buttons_set_press_callback(NULL);
+	app_buttons_set_long_press_callback(NULL);
+	app_buttons_set_combo_callback(NULL);
+	app_power_set_idle_hook(NULL);
+}
+
 static void close_reader(void)
 {
 	void (*cb)(void) = exit_cb;
@@ -398,12 +413,7 @@ static void close_reader(void)
 	sd_force_release();
 
 	exit_cb = NULL;
-	book_open = false;
-
-	app_buttons_set_press_callback(NULL);
-	app_buttons_set_long_press_callback(NULL);
-	app_buttons_set_combo_callback(NULL);
-	app_power_set_idle_hook(NULL);
+	teardown_reader_hooks();
 
 	if (cb) {
 		cb();
@@ -456,16 +466,13 @@ static int open_book_at_font(uint32_t resume_offset, bool have_resume_offset)
 	uint16_t content_bottom_px;
 	int ret;
 
-	ret = npb_open(full_path_buf, reader_font, &book);
-	if (ret) {
-		printk("reader: failed to open \"%s\" at font %d (%d)\n", full_path_buf,
-		       reader_font, ret);
-		return ret;
-	}
-
+	/* Grid/font metrics don't touch `book`, so they're validated up front -
+	 * that keeps this function to the same single-open/single-close shape
+	 * as render_page()/toggle_bookmark()/app_reader_jump_to_offset(), with
+	 * no npb_close() duplicated across early-error returns.
+	 */
 	app_text_get_grid(&grid_cols, &grid_rows);
 	if (grid_rows < 3) {
-		npb_close(&book);
 		return -ENOSPC;
 	}
 	chrome_row_height = app_text_row_height();
@@ -475,8 +482,14 @@ static int open_book_at_font(uint32_t resume_offset, bool have_resume_offset)
 	app_text_font_info(reader_font, &reader_glyph_width, &reader_font_height, &reader_cols);
 	content_rows = (content_bottom_px - content_top_px) / reader_font_height;
 	if (content_rows == 0) {
-		npb_close(&book);
 		return -ENOSPC;
+	}
+
+	ret = npb_open(full_path_buf, reader_font, &book);
+	if (ret) {
+		printk("reader: failed to open \"%s\" at font %d (%d)\n", full_path_buf,
+		       reader_font, ret);
+		return ret;
 	}
 
 	if (have_resume_offset) {
@@ -702,11 +715,7 @@ void app_reader_set_font(enum app_text_font font)
 		       old_font);
 		reader_font = old_font;
 		if (open_book_at_font(resume_offset, true)) {
-			book_open = false;
-			app_buttons_set_press_callback(NULL);
-			app_buttons_set_long_press_callback(NULL);
-			app_buttons_set_combo_callback(NULL);
-			app_power_set_idle_hook(NULL);
+			teardown_reader_hooks();
 			clear_session_marker();
 			sd_force_release();
 			return;
