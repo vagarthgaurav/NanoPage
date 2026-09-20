@@ -168,7 +168,19 @@ static void usb_msg_cb(struct usbd_context *const ctx, const struct usbd_msg *co
 
 static int setup_usbd(void)
 {
+	static bool setup_attempted;
 	int err;
+
+	if (setup_attempted) {
+		/*
+		 * usbd_add_configuration()/usbd_register_all_classes() have no
+		 * "remove" counterpart, so a failed attempt can't be unwound and a
+		 * retry would double-register whatever already succeeded. Refuse
+		 * instead of corrupting the USBD context's internal lists.
+		 */
+		return -EALREADY;
+	}
+	setup_attempted = true;
 
 	err = usbd_add_descriptor(&nanopage_usbd, &nanopage_lang);
 	if (err) {
