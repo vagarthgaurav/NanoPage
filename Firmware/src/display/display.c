@@ -125,16 +125,14 @@ int app_display_refresh_full(const uint8_t *buf, size_t buf_size)
 	ret = app_display_write(0, 0, width, height, buf, buf_size);
 	if (ret) {
 		printk("display_write (full) failed: %d\n", ret);
-		app_display_unlock();
-		return ret;
 	}
 
-	ret = display_blanking_off(display_dev);
+	int blank_ret = display_blanking_off(display_dev);
 	wait_busy();
 
 	app_display_unlock();
 
-	return ret;
+	return ret ? ret : blank_ret;
 }
 
 int app_display_refresh_fast(const uint8_t *buf, size_t buf_size)
