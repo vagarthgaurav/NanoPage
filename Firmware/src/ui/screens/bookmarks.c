@@ -317,6 +317,7 @@ void app_bookmarks_show(void (*on_back)(void), void (*on_selected)(void))
 	partial_count = 0;
 
 	app_buttons_set_press_callback(on_button);
+	app_buttons_set_long_press_callback(NULL);
 	bookmarks_active = true;
 }
 
