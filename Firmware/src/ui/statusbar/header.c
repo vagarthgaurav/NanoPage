@@ -55,7 +55,10 @@ int app_header_update(const char *folder, bool bookmarked)
 		return ret;
 	}
 
-	percent = (uint8_t)(soc_x10 / 10);
+	percent = (uint8_t)((soc_x10 + 5) / 10);
+	if (percent > 100) {
+		percent = 100;
+	}
 	charging = app_charger_is_charging();
 
 	if (have_last && strcmp(date_buf, last_date_buf) == 0 && percent == last_percent &&
