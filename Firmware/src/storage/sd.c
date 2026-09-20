@@ -161,18 +161,21 @@ int app_sd_usb_claim(void)
 
 	app_display_lock();
 
-	sd_usb_claimed = true;
-
 	ret = app_sd_power_on();
 	if (ret) {
+		app_display_unlock();
 		return ret;
 	}
 
 	ret = disk_access_init(APP_SD_DISK_NAME);
 	if (ret) {
 		printk("SD: USB disk_access_init failed (%d)\n", ret);
+		app_sd_power_off();
+		app_display_unlock();
 		return ret;
 	}
+
+	sd_usb_claimed = true;
 
 	return 0;
 }
