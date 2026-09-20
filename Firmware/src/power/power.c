@@ -57,6 +57,13 @@ void app_power_mark_activity(void)
 	k_work_reschedule(&idle_work, K_MSEC(APP_POWER_IDLE_TIMEOUT_MS));
 }
 
+void app_power_cancel_idle_sync(void)
+{
+	struct k_work_sync sync;
+
+	k_work_cancel_delayable_sync(&idle_work, &sync);
+}
+
 static void show_sleep_message(void)
 {
 	app_display_refresh_full(app_logo_nanopage, sizeof(app_logo_nanopage));

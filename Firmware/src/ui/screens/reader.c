@@ -382,6 +382,15 @@ static void close_reader(void)
 {
 	void (*cb)(void) = exit_cb;
 
+	/* Synchronize with the idle-timeout System OFF path before touching
+	 * any of the state it also reads/writes via flush_pending_state()
+	 * (book_open, bmk_state, exit_cb, ...). If a System OFF entry is
+	 * already in flight, this blocks until it finishes - which, since it
+	 * ends in sys_poweroff(), means this thread never resumes, which is
+	 * fine: the state was already flushed and the board is powering off.
+	 */
+	app_power_cancel_idle_sync();
+
 	if (sd_ensure_active() == 0) {
 		save_bookmark();
 		clear_session_marker();
