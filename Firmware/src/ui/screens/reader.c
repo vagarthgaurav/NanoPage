@@ -39,6 +39,7 @@ static uint32_t page_start_row;
 static struct npb_bookmark_file bmk_state;
 
 static bool page_bookmarked;
+static uint32_t last_blob_offset;
 
 static uint8_t partial_count;
 
@@ -94,7 +95,8 @@ static void render_page(void)
 		app_text_draw_text_px(y_px, text, reader_font);
 	}
 
-	page_bookmarked = bookmark_index_for_offset(current_blob_offset()) >= 0;
+	last_blob_offset = current_blob_offset();
+	page_bookmarked = bookmark_index_for_offset(last_blob_offset) >= 0;
 
 	npb_close(&book);
 }
@@ -113,18 +115,12 @@ static uint32_t current_blob_offset(void)
 static void save_bookmark(void)
 {
 	struct fs_file_t f;
-	uint32_t last_position = 0;
 	int ret;
-
-	if (npb_open(full_path_buf, reader_font, &book) == 0) {
-		last_position = current_blob_offset();
-		npb_close(&book);
-	}
 
 	memcpy(bmk_state.magic, NPB_BOOKMARK_MAGIC, sizeof(bmk_state.magic));
 	bmk_state.version = NPB_BOOKMARK_VERSION;
 	bmk_state.last_font_id = book.font_id;
-	bmk_state.last_position = last_position;
+	bmk_state.last_position = last_blob_offset;
 
 	fs_file_t_init(&f);
 	ret = fs_open(&f, bmk_path, FS_O_CREATE | FS_O_WRITE);
@@ -260,6 +256,7 @@ static void toggle_bookmark(void)
 	}
 	offset = current_blob_offset();
 	npb_close(&book);
+	last_blob_offset = offset;
 
 	idx = bookmark_index_for_offset(offset);
 
@@ -575,6 +572,7 @@ const char *app_reader_get_path(void)
 
 int app_reader_jump_to_offset(uint32_t text_offset)
 {
+	struct npb_row row;
 	uint32_t row_index;
 	int ret;
 
@@ -594,6 +592,9 @@ int app_reader_jump_to_offset(uint32_t text_offset)
 	}
 
 	ret = npb_find_row(&book, text_offset, &row_index);
+	if (ret == 0) {
+		ret = npb_read_row(&book, row_index, &row);
+	}
 	npb_close(&book);
 
 	if (ret) {
@@ -602,6 +603,7 @@ int app_reader_jump_to_offset(uint32_t text_offset)
 	}
 
 	page_start_row = row_index;
+	last_blob_offset = row.offset;
 	save_bookmark();
 
 	app_sd_deinit();
