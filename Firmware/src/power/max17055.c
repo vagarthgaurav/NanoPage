@@ -297,7 +297,7 @@ int max17055_restore_capacity(const struct device *dev,
 	uint16_t mix_soc, full_cap_nom, mix_cap;
 	int ret;
 
-	if (!learned || learned->cycles == 0) {
+	if (!learned || learned->full_cap_nom == 0) {
 		return -EINVAL;
 	}
 

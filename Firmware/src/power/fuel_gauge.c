@@ -103,11 +103,11 @@ int app_fuel_gauge_init(void)
 			       saved.rcomp0, saved.tempco, saved.full_cap_rep, saved.full_cap_nom,
 			       saved.cycles);
 			to_apply = &saved;
-			have_capacity_history = (saved.cycles != 0);
+			have_capacity_history = (saved.full_cap_nom != 0);
 		} else if (FACTORY_VALID) {
 			printk("fuel_gauge: POR - no saved data, using factory defaults\n");
 			to_apply = &factory_defaults;
-			have_capacity_history = (factory_defaults.cycles != 0);
+			have_capacity_history = (factory_defaults.full_cap_nom != 0);
 		} else {
 			printk("fuel_gauge: POR - no saved or factory data, characterizing from "
 			       "scratch\n");
