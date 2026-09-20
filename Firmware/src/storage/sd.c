@@ -32,6 +32,8 @@ static struct fs_mount_t mp = {
 
 static bool sd_mounted;
 
+static int sd_mount_refcount;
+
 static bool sd_usb_claimed;
 
 static int sd_power_refcount;
@@ -113,6 +115,12 @@ int app_sd_init(void)
 		return ret;
 	}
 
+	if (sd_mount_refcount > 0) {
+		sd_mount_refcount++;
+		app_display_unlock();
+		return 0;
+	}
+
 	ret = fs_mount(&mp);
 	if (ret) {
 		printk("SD: mount failed (%d)\n", ret);
@@ -121,6 +129,7 @@ int app_sd_init(void)
 	}
 
 	sd_mounted = true;
+	sd_mount_refcount = 1;
 	printk("SD: mounted at %s\n", DISK_MOUNT_PT);
 
 	app_display_unlock();
@@ -132,9 +141,13 @@ void app_sd_deinit(void)
 {
 	app_display_lock();
 
-	if (sd_mounted) {
-		fs_unmount(&mp);
-		sd_mounted = false;
+	if (sd_mount_refcount > 0) {
+		sd_mount_refcount--;
+		if (sd_mount_refcount == 0 && sd_mounted) {
+			fs_unmount(&mp);
+			sd_mounted = false;
+			printk("SD: unmounted\n");
+		}
 	}
 
 	app_sd_power_off();

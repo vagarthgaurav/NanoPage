@@ -22,6 +22,12 @@
 
 #define APP_READER_FULL_REFRESH_EVERY 10
 
+/* How long the SD card stays mounted/powered after the last reader action
+ * before it's torn back down, so a burst of quick page turns shares one
+ * mount instead of paying the mount/power-up cost per turn.
+ */
+#define APP_READER_SD_IDLE_MS 2000
+
 /* --- Chapter list (toc.c) --- */
 
 #define APP_TOC_FULL_REFRESH_EVERY 10

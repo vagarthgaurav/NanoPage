@@ -43,6 +43,60 @@ static uint32_t last_blob_offset;
 
 static uint8_t partial_count;
 
+static bool sd_mount_held;
+
+static void sd_idle_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (sd_mount_held) {
+		app_sd_deinit();
+		sd_mount_held = false;
+	}
+}
+
+static K_WORK_DELAYABLE_DEFINE(sd_idle_work, sd_idle_work_handler);
+
+/* Keeps the SD card mounted/powered for a short grace window after use, so a
+ * burst of quick actions (rapid page turns, TOC/bookmark browsing) shares one
+ * mount instead of paying app_sd_init()'s mount+power-up cost on every one.
+ * The card draws real current while merely powered-but-idle on this board, so
+ * the grace window must stay short and always resolve to a hard teardown
+ * (sd_force_release()) before entering any low-power state - see
+ * sd_force_release()'s callers.
+ */
+static int sd_ensure_active(void)
+{
+	int ret;
+
+	if (!sd_mount_held) {
+		ret = app_sd_init();
+		if (ret) {
+			return ret;
+		}
+		sd_mount_held = true;
+	}
+
+	k_work_reschedule(&sd_idle_work, K_MSEC(APP_READER_SD_IDLE_MS));
+
+	return 0;
+}
+
+/* Cancels any pending grace-window teardown and unmounts/powers off the SD
+ * card immediately. Used wherever the reader must guarantee the card is off
+ * before returning - closing the reader, giving up on an unrecoverable font
+ * switch, and flushing state before the board sleeps.
+ */
+static void sd_force_release(void)
+{
+	k_work_cancel_delayable(&sd_idle_work);
+
+	if (sd_mount_held) {
+		app_sd_deinit();
+		sd_mount_held = false;
+	}
+}
+
 static int bookmark_index_for_offset(uint32_t offset)
 {
 	for (uint8_t i = 0; i < bmk_state.bookmark_count; i++) {
@@ -174,9 +228,14 @@ static void flush_pending_state(void)
 {
 	char path[APP_SD_MAX_PATH_LEN + sizeof(APP_READER_BMK_DIR) + 24];
 
-	if (app_sd_init()) {
-		printk("reader: SD unavailable, pending state not flushed before sleep\n");
-		return;
+	k_work_cancel_delayable(&sd_idle_work);
+
+	if (!sd_mount_held) {
+		if (app_sd_init()) {
+			printk("reader: SD unavailable, pending state not flushed before sleep\n");
+			return;
+		}
+		sd_mount_held = true;
 	}
 
 	if (book_open) {
@@ -196,6 +255,7 @@ static void flush_pending_state(void)
 	}
 
 	app_sd_deinit();
+	sd_mount_held = false;
 }
 
 static void load_bookmark(void)
@@ -245,13 +305,12 @@ static void toggle_bookmark(void)
 		return;
 	}
 
-	if (app_sd_init()) {
+	if (sd_ensure_active()) {
 		printk("reader: SD unavailable, bookmark not toggled\n");
 		return;
 	}
 
 	if (npb_open(full_path_buf, reader_font, &book) != 0) {
-		app_sd_deinit();
 		return;
 	}
 	offset = current_blob_offset();
@@ -277,12 +336,10 @@ static void toggle_bookmark(void)
 		printk("reader: bookmark added at offset %u\n", offset);
 	} else {
 		printk("reader: bookmark list full (%d), not adding\n", NPB_MAX_BOOKMARKS);
-		app_sd_deinit();
 		return;
 	}
 
 	save_bookmark();
-	app_sd_deinit();
 
 	if (app_header_update("", page_bookmarked) > 0) {
 		app_text_flush();
@@ -304,7 +361,7 @@ static void turn_page(int direction)
 		page_start_row += content_rows;
 	}
 
-	if (app_sd_init()) {
+	if (sd_ensure_active()) {
 		printk("reader: SD unavailable, page turn not saved\n");
 		return;
 	}
@@ -316,19 +373,17 @@ static void turn_page(int direction)
 	reader_flush();
 
 	save_bookmark();
-
-	app_sd_deinit();
 }
 
 static void close_reader(void)
 {
 	void (*cb)(void) = exit_cb;
 
-	if (app_sd_init() == 0) {
+	if (sd_ensure_active() == 0) {
 		save_bookmark();
 		clear_session_marker();
-		app_sd_deinit();
 	}
+	sd_force_release();
 
 	exit_cb = NULL;
 	book_open = false;
@@ -366,7 +421,7 @@ static void reopen_reading(void)
 	app_buttons_set_long_press_callback(open_reader_menu);
 	app_buttons_set_combo_callback(toggle_bookmark);
 
-	if (app_sd_init()) {
+	if (sd_ensure_active()) {
 		printk("reader: SD unavailable, can't redraw after menu/toc\n");
 		return;
 	}
@@ -375,8 +430,6 @@ static void reopen_reading(void)
 	app_header_update("", page_bookmarked);
 	app_text_full_refresh();
 	partial_count = 0;
-
-	app_sd_deinit();
 }
 
 static void open_reader_menu(void)
@@ -463,7 +516,7 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 	strncpy(session_path_buf, path, sizeof(session_path_buf) - 1);
 	session_path_buf[sizeof(session_path_buf) - 1] = '\0';
 
-	ret = app_sd_init();
+	ret = sd_ensure_active();
 	if (ret) {
 		printk("reader: SD init failed (%d)\n", ret);
 		return ret;
@@ -472,14 +525,14 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 	ret = app_sd_full_path(path, full_path_buf, sizeof(full_path_buf));
 	if (ret) {
 		printk("reader: couldn't resolve \"%s\" (%d)\n", path, ret);
-		app_sd_deinit();
+		sd_force_release();
 		return ret;
 	}
 
 	ret = build_bmk_paths(path);
 	if (ret) {
 		printk("reader: bookmark sidecar path too long for \"%s\"\n", path);
-		app_sd_deinit();
+		sd_force_release();
 		return ret;
 	}
 
@@ -491,7 +544,7 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 
 	ret = open_book_at_font(0, false);
 	if (ret) {
-		app_sd_deinit();
+		sd_force_release();
 		return ret;
 	}
 
@@ -503,12 +556,10 @@ int app_reader_open(const char *path, void (*on_exit)(void))
 	app_header_update("", page_bookmarked);
 
 	ret = app_text_full_refresh();
-
-	app_sd_deinit();
-
 	if (ret) {
 		exit_cb = NULL;
 		book_open = false;
+		sd_force_release();
 		return ret;
 	}
 
@@ -580,14 +631,13 @@ int app_reader_jump_to_offset(uint32_t text_offset)
 		return -EINVAL;
 	}
 
-	ret = app_sd_init();
+	ret = sd_ensure_active();
 	if (ret) {
 		return ret;
 	}
 
 	ret = npb_open(full_path_buf, reader_font, &book);
 	if (ret) {
-		app_sd_deinit();
 		return ret;
 	}
 
@@ -598,15 +648,12 @@ int app_reader_jump_to_offset(uint32_t text_offset)
 	npb_close(&book);
 
 	if (ret) {
-		app_sd_deinit();
 		return ret;
 	}
 
 	page_start_row = row_index;
 	last_blob_offset = row.offset;
 	save_bookmark();
-
-	app_sd_deinit();
 
 	return 0;
 }
@@ -625,7 +672,7 @@ void app_reader_set_font(enum app_text_font font)
 	enum app_text_font old_font = reader_font;
 	uint32_t resume_offset = 0;
 
-	if (app_sd_init()) {
+	if (sd_ensure_active()) {
 		printk("reader: SD init failed for font change\n");
 		return;
 	}
@@ -648,7 +695,7 @@ void app_reader_set_font(enum app_text_font font)
 			app_buttons_set_combo_callback(NULL);
 			app_power_set_idle_hook(NULL);
 			clear_session_marker();
-			app_sd_deinit();
+			sd_force_release();
 			return;
 		}
 	}
@@ -657,8 +704,6 @@ void app_reader_set_font(enum app_text_font font)
 	app_header_update("", page_bookmarked);
 	app_text_full_refresh();
 	partial_count = 0;
-
-	app_sd_deinit();
 }
 
 bool app_reader_is_active(void)
