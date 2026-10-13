@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/kernel.h>
 
 /* Pushes bytes out as one notification on LIB_DATA. Returns 0 or a negative
  * errno (not connected, not subscribed, ...); any error aborts the request.
@@ -26,5 +27,11 @@ int app_companion_lib_submit(struct bt_conn *conn, const void *cmd, uint16_t len
  * card, so it is safe from the BT RX thread.
  */
 bool app_companion_lib_get_sd_usage(uint32_t *free_kb, uint32_t *total_kb);
+
+/* Queues `work` on the library work queue thread, so its SD access is
+ * serialised with LIST / CHAPTERS / DELETE. Used by the calendar push. Callable
+ * from any thread once the system is up.
+ */
+void app_companion_lib_queue_work(struct k_work *work);
 
 #endif /* APP_COMPANION_LIBRARY_H_ */

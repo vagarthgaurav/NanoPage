@@ -7,7 +7,7 @@ Status: **in progress.** Slice 1 (BT stack, companion mode, pairing,
 0), while `CHAPTERS`, storage-busy and the empty-card case are still
 unverified. `DELETE` is implemented and verified on hardware (2026-10-14): it removes the bookmark sidecar, then the book, and answers
 `not found` / `bad request` (bad id, or not a regular file) / `internal`
-(unlink failed). Calendar is declared in the GATT table but stubbed.
+(unlink failed). Calendar receive (`BEGIN` / `CAL_DATA` / `COMMIT`, `src/ble/companion_calendar.c`, `src/storage/calendar_store.c`) is implemented and builds, but is unverified on hardware.
 The wire format is final for `proto_version` 2 and lives in `Firmware/src/ble/companion_proto.h`.
 
 The phone app lives in a separate repo, `NanoPage-companion-app`
@@ -148,11 +148,25 @@ commit before the user confirms.
 4. **Delete** a book and its sidecar. Sidecar goes first so a failed book
    unlink only loses the reading position and never leaves a stale bookmark
    behind. The `book_id` gets the same validation as `CHAPTERS`.
-5. **Calendar store**: receive the blob, verify the CRC, write it atomically
-   (temp file, then rename) to e.g. `.nanopage/calendar.bin`, and make
-   `calendar_day.c` read it instead of its mock events. The calendar day-view
-   work still has an open question about where events live; this is the
-   proposal.
+5. **Calendar store**: implemented, not yet verified on hardware. `BEGIN`
+   announces length, CRC and count (rejected up front with `too large` /
+   `bad request`); `CAL_DATA` chunks collect in a 24 KB RAM buffer, so nothing
+   touches the SD card until `COMMIT`. `COMMIT` checks the CRC-32, then the
+   structure (`app_calendar_store_validate`: magic, version, count, titles
+   7-bit ASCII, lengths consume the blob exactly), then writes
+   `/.nanopage/calendar.tmp` and swaps it in. FatFs cannot rename onto an
+   existing file, so the old `calendar.bin` is unlinked first; if power dies in
+   between, `load` falls back to the complete `calendar.tmp`. `CAL_STATUS`
+   answers `BEGIN` and `COMMIT` (always sent from the library work queue, which
+   also serialises SD access with `LIST`/`DELETE`). Any failed `COMMIT` ends the
+   transfer: the phone has to send a new `BEGIN`. A disconnect mid-transfer
+   drops the partial blob and keeps the stored calendar. `calendar_day.c` loads
+   the file once when the view opens and shows the events whose `start_local`
+   falls on the viewed day (all-day first, then by start time; a multi-day
+   event shows only on its start day, which is why the phone splits them).
+   Caps: 500 events, 24 KB blob, 47 title characters, 4 all-day and 32 timed
+   events per day. Costs about 53 KB of RAM (two 24 KB buffers: receive and
+   view).
 6. **Time set** from `TIME` into the RTC driver. Implemented (`TIME` write
    calls `app_rtc_set_time`, built in slice 1).
 7. **Last-read time**: implemented via the sidecar's `last_read_local`

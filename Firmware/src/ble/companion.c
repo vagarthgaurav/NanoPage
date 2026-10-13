@@ -16,6 +16,7 @@
 
 #include "charger.h"
 #include "companion.h"
+#include "companion_calendar.h"
 #include "companion_library.h"
 #include "companion_proto.h"
 #include "config.h"
@@ -221,6 +222,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	}
 
 	printk("companion: phone disconnected (0x%02x)\n", reason);
+
+	/* Drops a half-received calendar; never blocks. */
+	app_companion_cal_reset();
 	k_sem_give(&disc_sem);
 
 	if (is_active) {
@@ -395,6 +399,7 @@ static ssize_t write_time(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 }
 
 static int lib_send(struct bt_conn *conn, const uint8_t *data, uint16_t len);
+static int cal_send(struct bt_conn *conn, const uint8_t *data, uint16_t len);
 
 static ssize_t write_lib_ctrl(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 			      const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
@@ -429,14 +434,47 @@ static ssize_t write_lib_ctrl(struct bt_conn *conn, const struct bt_gatt_attr *a
 static ssize_t write_cal_ctrl(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 			      const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
-	printk("companion: CAL_CTRL not implemented yet\n");
+	int err;
+
+	ARG_UNUSED(attr);
+	ARG_UNUSED(flags);
+
+	if (offset != 0) {
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+	}
+
+	/* Runs on the BT RX thread: the calendar receiver only updates its state
+	 * and queues the answer.
+	 */
+	err = app_companion_cal_ctrl(conn, buf, len, cal_send);
+	if (err == -EINVAL) {
+		printk("companion: CAL_CTRL rejected (len %u)\n", len);
+		return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+	}
+	if (err == -EBUSY) {
+		/* The previous BEGIN/COMMIT has not been answered yet. */
+		printk("companion: CAL_CTRL busy\n");
+		return BT_GATT_ERR(BT_ATT_ERR_PREPARE_QUEUE_FULL);
+	}
+	if (err) {
+		return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+	}
+
 	return len;
 }
 
 static ssize_t write_cal_data(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 			      const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
-	printk("companion: CAL_DATA not implemented yet\n");
+	ARG_UNUSED(conn);
+	ARG_UNUSED(attr);
+	ARG_UNUSED(flags);
+
+	/* Write without response: nothing to report back, errors surface at COMMIT. */
+	if (offset == 0) {
+		app_companion_cal_data(buf, len);
+	}
+
 	return len;
 }
 
@@ -504,6 +542,23 @@ static int lib_send(struct bt_conn *conn, const uint8_t *data, uint16_t len)
 	}
 
 	return bt_gatt_notify_uuid(conn, &uuid_lib_data.uuid, companion_svc.attrs, data, len);
+}
+
+/* Called from the library worker thread (the calendar answer runs there too). */
+static int cal_send(struct bt_conn *conn, const uint8_t *data, uint16_t len)
+{
+	const struct bt_gatt_attr *attr = bt_gatt_find_by_uuid(
+		companion_svc.attrs, companion_svc.attr_count, &uuid_cal_status.uuid);
+
+	if (attr == NULL) {
+		return -ENOENT;
+	}
+
+	if (!bt_gatt_is_subscribed(conn, attr, BT_GATT_CCC_NOTIFY)) {
+		return -EACCES;
+	}
+
+	return bt_gatt_notify_uuid(conn, &uuid_cal_status.uuid, companion_svc.attrs, data, len);
 }
 
 /* ------------------------------------------------------------------ */
@@ -608,6 +663,9 @@ static void teardown(enum app_companion_state final_state, bool report)
 	if (err) {
 		printk("companion: bt_disable failed (%d)\n", err);
 	}
+
+	/* Covers a link that never reached disconnected() (disconnect wait timed out). */
+	app_companion_cal_reset();
 
 	app_power_set_sleep_inhibited(false);
 	app_power_mark_activity();

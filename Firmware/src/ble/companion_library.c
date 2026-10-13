@@ -631,6 +631,11 @@ int app_companion_lib_submit(struct bt_conn *conn, const void *cmd, uint16_t len
 	return 0;
 }
 
+void app_companion_lib_queue_work(struct k_work *work)
+{
+	k_work_submit_to_queue(&lib_workq, work);
+}
+
 static int lib_init(void)
 {
 	k_work_init(&lib_work, lib_work_handler);

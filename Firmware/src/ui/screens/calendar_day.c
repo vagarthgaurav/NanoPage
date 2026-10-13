@@ -1,9 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 /*
- * MOCKUP: the events below are hardcoded fake data, keyed by the viewed day's
- * offset from today. Replace fill_day() (and the event_count()/event_at()
- * accessors) with a real event store.
+ * Day view of the calendar. Events come from calendar_store, loaded once when
+ * the view is shown and looked up per viewed day by fill_day().
  */
 
 #include <errno.h>
@@ -11,10 +10,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
 #include "buttons.h"
 #include "calendar_day.h"
+#include "calendar_store.h"
 #include "header.h"
 #include "list_widget.h"
 #include "rtc.h"
@@ -39,33 +40,10 @@
 #define APP_CALENDAR_FALLBACK_MONTH 1
 #define APP_CALENDAR_FALLBACK_DAY   1
 
-#define HM(h, m) ((h) * 60 + (m))
-
 struct cal_event {
 	uint16_t start_min;
 	uint16_t dur_min;
-	const char *title;
-};
-
-static const char *const set0_all_day[] = {"Diwali", "Priya's birthday"};
-
-static const struct cal_event set0_timed[] = {
-	{HM(9, 0), 15, "Team standup"},
-	{HM(10, 30), 45, "Dentist"},
-	{HM(12, 30), 60, "Lunch w/ Priya"},
-	{HM(15, 0), 60, "PCB review"},
-	{HM(17, 0), 30, "Pick up parcel"},
-	{HM(18, 30), 60, "Gym"},
-	{HM(21, 0), 30, "Call Mom"},
-};
-
-static const struct cal_event set1_timed[] = {
-	{HM(8, 30), 45, "Run"},
-	{HM(10, 0), 60, "Sprint planning"},
-	{HM(13, 0), 60, "Lunch w/ Arjun"},
-	{HM(14, 30), 15, "Order stencil"},
-	{HM(16, 0), 90, "Display review"},
-	{HM(19, 0), 120, "Dinner"},
+	char title[APP_CALENDAR_STORE_TITLE_MAX + 1];
 };
 
 static const char *const weekday_name[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
@@ -73,8 +51,10 @@ static const char *const weekday_name[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "F
 /* Per-day state, refilled by fill_day() on every day change. */
 static struct cal_event day_events[APP_CALENDAR_MAX_EVENTS];
 static size_t day_event_count;
-static const char *day_all_day[APP_CALENDAR_MAX_ALL_DAY];
+static const char *day_all_day[APP_CALENDAR_MAX_ALL_DAY]; /* point into fetched[] */
 static size_t day_all_day_count;
+static struct app_calendar_store_event
+	fetched[APP_CALENDAR_MAX_ALL_DAY + APP_CALENDAR_MAX_EVENTS];
 
 static struct app_list_widget list;
 
@@ -131,33 +111,29 @@ static const struct cal_event *event_at(size_t idx)
 	return &day_events[idx];
 }
 
-static void set_timed(const struct cal_event *src, size_t n)
-{
-	day_event_count = MIN(n, ARRAY_SIZE(day_events));
-	memcpy(day_events, src, day_event_count * sizeof(day_events[0]));
-}
-
 /* Fills the per-day arrays for the day at the given offset from today. */
 static void fill_day(int offset)
 {
-	int set = ((offset % 3) + 3) % 3;
+	int32_t day = today_days + offset - APP_CALENDAR_STORE_EPOCH_OFFSET_DAYS;
+	size_t n = app_calendar_store_get_day(day, fetched, ARRAY_SIZE(fetched));
 
 	day_event_count = 0;
 	day_all_day_count = 0;
 
-	switch (set) {
-	case 0:
-		day_all_day_count = MIN(ARRAY_SIZE(set0_all_day), ARRAY_SIZE(day_all_day));
-		for (size_t i = 0; i < day_all_day_count; i++) {
-			day_all_day[i] = set0_all_day[i];
+	for (size_t i = 0; i < n; i++) {
+		const struct app_calendar_store_event *src = &fetched[i];
+
+		if (src->all_day) {
+			if (day_all_day_count < ARRAY_SIZE(day_all_day)) {
+				day_all_day[day_all_day_count++] = src->title;
+			}
+		} else if (day_event_count < ARRAY_SIZE(day_events)) {
+			struct cal_event *dst = &day_events[day_event_count++];
+
+			dst->start_min = src->start_min;
+			dst->dur_min = src->dur_min;
+			memcpy(dst->title, src->title, sizeof(dst->title));
 		}
-		set_timed(set0_timed, ARRAY_SIZE(set0_timed));
-		break;
-	case 1:
-		set_timed(set1_timed, ARRAY_SIZE(set1_timed));
-		break;
-	default:
-		break;
 	}
 }
 
@@ -494,6 +470,7 @@ static void on_hold(enum app_button button)
 void app_calendar_day_show(void (*on_exit)(void))
 {
 	uint16_t rows;
+	int ret;
 
 	exit_cb = on_exit;
 
@@ -501,6 +478,11 @@ void app_calendar_day_show(void (*on_exit)(void))
 	app_text_get_content_rows(&content_start_row, &content_rows);
 
 	read_today();
+
+	/* On any error the store leaves nothing loaded: show an empty calendar. */
+	ret = app_calendar_store_load();
+	printk("calendar: load %d\n", ret);
+
 	day_offset = 0;
 	refresh_day();
 

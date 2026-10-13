@@ -34,10 +34,12 @@ target_sources(app PRIVATE
 	src/power/charger.c
 	src/power/power.c
 	src/storage/sd.c
+	src/storage/calendar_store.c
 	src/book/npb.c
 	src/usb/usb_msc.c
 	src/ble/companion.c
 	src/ble/companion_library.c
+	src/ble/companion_calendar.c
 	src/ui/screens/companion_screen.c
 )
 
