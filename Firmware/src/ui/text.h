@@ -6,7 +6,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "font_siji.h"
+#include "font_battery.h"
+#include "font_icons.h"
 
 enum app_text_font {
 	APP_TEXT_FONT_SMALL = 0,  /* 10x16px cells */
@@ -43,6 +44,8 @@ int app_text_draw_row_bottom_aligned(uint16_t row, const char *str, uint16_t nat
 int app_text_draw_text_px(uint16_t y_px, const char *str, enum app_text_font font);
 
 int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon);
+
+int app_text_draw_battery(uint16_t row, uint16_t x, enum app_text_battery icon);
 
 int app_text_set_cursor(uint16_t row, uint16_t col, bool visible);
 

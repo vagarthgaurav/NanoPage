@@ -2,7 +2,7 @@
 
 #include <stdbool.h>
 
-#include "font_siji.h"
+#include "font_icons.h"
 #include "list_widget.h"
 #include "text.h"
 

@@ -5,13 +5,15 @@
 
 #include "charger.h"
 #include "fuel_gauge.h"
-#include "font_siji.h"
+#include "font_icons.h"
 #include "header.h"
 #include "rtc.h"
 #include "text.h"
 
 #define APP_HEADER_ELEMENT_GAP_COLS 1
-#define APP_HEADER_ICON_COLS        2 /* 12px icon / 6px cell width */
+#define APP_HEADER_BATTERY_COLS     (APP_TEXT_BATTERY_WIDTH_PX / 6) /* 6px cell width */
+/* No whole-column gap before the battery: its glyph already starts with 3 blank pixels. */
+#define APP_HEADER_PERCENT_GAP_COLS 0
 
 static void draw_str(uint16_t row, uint16_t col, const char *str, size_t len)
 {
@@ -35,7 +37,8 @@ int app_header_update(const char *folder, bool bookmarked)
 	char date_buf[24];
 	char percent_buf[8];
 	size_t date_len, percent_len, folder_len, folder_max;
-	int date_col, battery_col, percent_col, charging_col;
+	int date_col, battery_col, percent_col;
+	enum app_text_battery icon;
 	uint8_t percent, level;
 	bool charging;
 	int ret;
@@ -93,28 +96,23 @@ int app_header_update(const char *folder, bool bookmarked)
 
 	draw_str(APP_HEADER_ROW, (uint16_t)date_col, date_buf, date_len);
 
-	battery_col = (cols >= APP_HEADER_ICON_COLS) ? (int)cols - APP_HEADER_ICON_COLS : 0;
+	battery_col = (cols >= APP_HEADER_BATTERY_COLS) ? (int)cols - APP_HEADER_BATTERY_COLS : 0;
 
 	snprintf(percent_buf, sizeof(percent_buf), "%u%%", percent);
 	percent_len = strlen(percent_buf);
-	percent_col = battery_col - APP_HEADER_ELEMENT_GAP_COLS - (int)percent_len;
+	percent_col = battery_col - APP_HEADER_PERCENT_GAP_COLS - (int)percent_len;
 	if (percent_col < 0) {
 		percent_col = 0;
 	}
 	draw_str(APP_HEADER_ROW, (uint16_t)percent_col, percent_buf, percent_len);
 
 	if (charging) {
-		charging_col = percent_col - APP_HEADER_ELEMENT_GAP_COLS - APP_HEADER_ICON_COLS;
-		if (charging_col >= 0) {
-			app_text_draw_icon(APP_HEADER_ROW,
-					    app_text_col_to_px((uint16_t)charging_col),
-					    APP_TEXT_ICON_CHARGING);
-		}
+		icon = APP_TEXT_BATTERY_CHARGING;
+	} else {
+		level = (uint8_t)((percent * (APP_TEXT_BATTERY_LEVELS - 1) + 50) / 100);
+		icon = (enum app_text_battery)(APP_TEXT_BATTERY_MIN + level);
 	}
-
-	level = (uint8_t)((percent * (APP_TEXT_ICON_BATTERY_LEVELS - 1) + 50) / 100);
-	app_text_draw_icon(APP_HEADER_ROW, app_text_col_to_px((uint16_t)battery_col),
-			    (enum app_text_icon)(APP_TEXT_ICON_BATTERY_MIN + level));
+	app_text_draw_battery(APP_HEADER_ROW, app_text_col_to_px((uint16_t)battery_col), icon);
 
 	app_text_draw_hline(APP_HEADER_ROW, app_text_row_height() - 1, true);
 

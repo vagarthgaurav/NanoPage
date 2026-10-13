@@ -280,7 +280,8 @@ int app_text_draw_cell(uint16_t row, uint16_t col, char c)
 	return 0;
 }
 
-int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon)
+static int draw_icon_glyph(const struct cfb_font *f, unsigned char glyph, uint16_t row,
+			    uint16_t x)
 {
 	uint16_t py, row_height;
 
@@ -288,17 +289,27 @@ int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon)
 		return -EINVAL;
 	}
 
-	if (icon > font_siji_icons.last_char) {
+	if (glyph > f->last_char) {
 		return -EINVAL;
 	}
 
 	row_height = font_entry(cur_font)->height;
 	py = row * row_height;
 
-	draw_glyph(&font_siji_icons, (unsigned char)icon, x, py);
-	mark_dirty_px(py, row_height, x, x + font_siji_icons.width);
+	draw_glyph(f, glyph, x, py);
+	mark_dirty_px(py, row_height, x, x + f->width);
 
 	return 0;
+}
+
+int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon)
+{
+	return draw_icon_glyph(&font_icons, (unsigned char)icon, row, x);
+}
+
+int app_text_draw_battery(uint16_t row, uint16_t x, enum app_text_battery icon)
+{
+	return draw_icon_glyph(&font_battery_icons, (unsigned char)icon, row, x);
 }
 
 uint16_t app_text_col_to_px(uint16_t col)

@@ -7,7 +7,7 @@
 #include "browser.h"
 #include "buttons.h"
 #include "calendar_day.h"
-#include "font_siji.h"
+#include "font_icons.h"
 #include "header.h"
 #include "list_widget.h"
 #include "menu.h"

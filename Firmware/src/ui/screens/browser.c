@@ -8,7 +8,7 @@
 #include "browser.h"
 #include "buttons.h"
 #include "config.h"
-#include "font_siji.h"
+#include "font_icons.h"
 #include "header.h"
 #include "list_widget.h"
 #include "reader.h"
@@ -131,8 +131,17 @@ static void draw_name(uint16_t row, const char *name)
 	}
 }
 
+static bool has_npb_extension(const char *name)
+{
+	size_t len = strlen(name);
+
+	return len > 4 && strcasecmp(name + len - 4, ".npb") == 0;
+}
+
 static void draw_entry(uint16_t row, size_t idx, void *user_data)
 {
+	enum app_text_icon icon;
+
 	ARG_UNUSED(user_data);
 
 	app_text_draw_row(row, "");
@@ -141,8 +150,15 @@ static void draw_entry(uint16_t row, size_t idx, void *user_data)
 		return;
 	}
 
-	app_text_draw_icon(row, app_text_col_to_px(APP_BROWSER_TYPE_ICON_COL),
-			    entries[idx].is_dir ? APP_TEXT_ICON_FOLDER : APP_TEXT_ICON_FILE);
+	if (entries[idx].is_dir) {
+		icon = APP_TEXT_ICON_FOLDER;
+	} else if (has_npb_extension(entries[idx].name)) {
+		icon = APP_TEXT_ICON_BOOK;
+	} else {
+		icon = APP_TEXT_ICON_FILE;
+	}
+
+	app_text_draw_icon(row, app_text_col_to_px(APP_BROWSER_TYPE_ICON_COL), icon);
 	draw_name(row, entries[idx].name);
 }
 
@@ -176,13 +192,6 @@ static int build_child_path(const char *name, char *out, size_t out_size)
 	}
 
 	return 0;
-}
-
-static bool has_npb_extension(const char *name)
-{
-	size_t len = strlen(name);
-
-	return len > 4 && strcasecmp(name + len - 4, ".npb") == 0;
 }
 
 static void resume_browser(void)

@@ -53,7 +53,7 @@ for a look consistent with the rest of the UI):
 
 Cutting the actual `font_tamzen_8x16`/`font_tamzen_10x24` glyph bitmaps
 (BDF→CFB conversion, same pipeline already used for `font_tamzen_6x16`
-and `font_siji_icons`) is separate font/firmware work, not part of this
+and `font_icons`) is separate font/firmware work, not part of this
 format. Each variant descriptor in the file records its real glyph
 width/height so a future loader can sanity-check its compiled-in font
 table against what a given `.npb` file was actually wrapped for, instead
@@ -303,7 +303,7 @@ compression.
     with plain in-memory array surgery before `save_bookmark()` writes
     the whole struct back wholesale, per the sidecar's own fixed-size
     "always rewritten in one shot" design. A **bookmark icon**
-    (`font_siji.h`'s new `APP_TEXT_ICON_BOOKMARK`, hand-drawn - a ribbon
+    (`font_icons.h`'s new `APP_TEXT_ICON_BOOKMARK`, hand-drawn - a ribbon
     shape tapering to a V-notch, same geometric-icon approach as the
     existing settings "sliders" glyph, no source font for a bookmark
     glyph) takes over the header's folder-name spot (`header.h`'s
