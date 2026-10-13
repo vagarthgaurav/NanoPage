@@ -4,6 +4,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/rtc.h>
+#include <zephyr/sys/timeutil.h>
 
 #include "i2c1_bus.h"
 #include "rtc.h"
@@ -110,6 +111,37 @@ int app_rtc_set_time(const struct rtc_time *t)
 	}
 
 	return ret;
+}
+
+#define SECONDS_1970_TO_2000 946684800LL
+
+int app_rtc_get_minutes_since_2000(uint32_t *out)
+{
+	struct rtc_time now;
+	struct tm tm = {
+		.tm_sec = 0,
+	};
+	int64_t secs;
+	int ret = app_rtc_get_time(&now);
+
+	if (ret) {
+		return ret;
+	}
+
+	tm.tm_sec = now.tm_sec;
+	tm.tm_min = now.tm_min;
+	tm.tm_hour = now.tm_hour;
+	tm.tm_mday = now.tm_mday;
+	tm.tm_mon = now.tm_mon;
+	tm.tm_year = now.tm_year;
+
+	secs = timeutil_timegm64(&tm) - SECONDS_1970_TO_2000;
+	if (secs < 0) {
+		return -ERANGE;
+	}
+
+	*out = (uint32_t)(secs / 60);
+	return 0;
 }
 
 void app_rtc_log_time(void)

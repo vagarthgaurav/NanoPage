@@ -207,33 +207,40 @@ static int bookmark_full_path(void)
 	return app_sd_full_path(bmk_rel, full_path, sizeof(full_path));
 }
 
-/* Reads last_position from the bookmark sidecar for vpath; 0 if the sidecar is
- * missing or not ours. Only the first 12 bytes are needed.
+/* Reads last_position and last_read_local from the bookmark sidecar for
+ * vpath; both 0 if the sidecar is missing or not ours. last_read_local is 0
+ * for old sidecars that predate the field.
  */
-static uint32_t read_last_position(void)
+static void read_sidecar(uint32_t *pos, uint32_t *last_read)
 {
 	uint8_t buf[offsetof(struct npb_bookmark_file, last_position) + sizeof(uint32_t)];
-	uint32_t pos = 0;
 	ssize_t n;
 
+	*pos = 0;
+	*last_read = 0;
+
 	if (bookmark_full_path()) {
-		return 0;
+		return;
 	}
 
 	fs_file_t_init(&file);
 	if (fs_open(&file, full_path, FS_O_READ)) {
-		return 0;
+		return;
 	}
 
 	n = fs_read(&file, buf, sizeof(buf));
-	fs_close(&file);
-
 	if (n == sizeof(buf) &&
 	    memcmp(buf, NPB_BOOKMARK_MAGIC, sizeof(((struct npb_bookmark_file *)0)->magic)) == 0) {
-		memcpy(&pos, &buf[offsetof(struct npb_bookmark_file, last_position)], sizeof(pos));
+		memcpy(pos, &buf[offsetof(struct npb_bookmark_file, last_position)], sizeof(*pos));
+
+		if (fs_seek(&file, offsetof(struct npb_bookmark_file, last_read_local),
+			    FS_SEEK_SET) == 0 &&
+		    fs_read(&file, last_read, sizeof(*last_read)) != sizeof(*last_read)) {
+			*last_read = 0;
+		}
 	}
 
-	return pos;
+	fs_close(&file);
 }
 
 /* ------------------------------------------------------------------ */
@@ -243,6 +250,7 @@ static uint32_t read_last_position(void)
 static void emit_book(const struct fs_dirent *ent)
 {
 	struct app_companion_book_record *rec = &book_rec;
+	uint32_t last_position, last_read;
 	int ret = open_book();
 
 	if (ret) {
@@ -258,8 +266,9 @@ static void emit_book(const struct fs_dirent *ent)
 	rec->file_size = ent->size;
 	rec->text_blob_size = hdr.text_blob_size;
 	rec->chapter_count = hdr.chapter_count;
-	rec->last_position = read_last_position();
-	rec->last_read_local = 0;
+	read_sidecar(&last_position, &last_read);
+	rec->last_position = last_position;
+	rec->last_read_local = last_read;
 
 	emit_frame(APP_COMPANION_FRAME_BOOK, rec, sizeof(*rec));
 }

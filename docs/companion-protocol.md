@@ -153,9 +153,11 @@ commit before the user confirms.
    `calendar_day.c` read it instead of its mock events. The calendar day-view
    work still has an open question about where events live; this is the
    proposal.
-6. **Time set** from `TIME` into the RTC driver.
-7. **Last-read time**: store a timestamp in the sidecar (or use its mtime) so
-   "Recent" and "Yesterday, 21:40" in the app can work.
+6. **Time set** from `TIME` into the RTC driver. Implemented (`TIME` write
+   calls `app_rtc_set_time`, built in slice 1).
+7. **Last-read time**: implemented via the sidecar's `last_read_local`
+   (minutes since 2000-01-01 local, stamped on each bookmark save), reported
+   in `LIST`, so "Recent" and "Yesterday, 21:40" in the app can work.
 
 ## Test plan (device side)
 

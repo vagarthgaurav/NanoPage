@@ -23,7 +23,13 @@ struct npb_bookmark_file {
 	uint8_t bookmark_count; /* 0..NPB_MAX_BOOKMARKS, how many of bookmarks[] are valid */
 	uint32_t last_position; /* text blob byte offset - auto-resume point */
 	struct npb_bookmark bookmarks[NPB_MAX_BOOKMARKS];
+	uint32_t last_read_local; /* minutes since 2000-01-01 00:00 local time, 0 = unknown */
 } __attribute__((packed));
-/* 12 + 16 * 40 = 652 bytes */
+/* 12 + 16 * 40 + 4 = 656 bytes */
+
+/* Size of the file before last_read_local was appended. Such files are still
+ * valid; they load with last_read_local == 0.
+ */
+#define NPB_BOOKMARK_FILE_SIZE_V1 652
 
 #endif /* APP_BOOK_NPB_BOOKMARK_FORMAT_H_ */

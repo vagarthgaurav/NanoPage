@@ -165,8 +165,11 @@ The sidecar holds:
 - up to `NPB_MAX_BOOKMARKS` (16) explicit user bookmarks, each a text
   blob byte offset plus an optional short label.
 - `last_font_id` — which font size was active, for resume convenience.
+- `last_read_local` — a trailing `uint32_t`: minutes since 2000-01-01 00:00
+  on the device's local wall clock (the RTC), 0 = unknown. Stamped from the
+  RTC on every sidecar save, and reported to the companion app in `LIST`.
 
-Fixed capacity, no growable list, so the whole sidecar (652 bytes at 16
+Fixed capacity, no growable list, so the whole sidecar (656 bytes at 16
 slots) is small enough to rewrite wholesale in one write whenever a
 bookmark is added/removed or the position advances — there's no
 partial-write corruption case to reason about. Every position in the
@@ -174,6 +177,10 @@ sidecar is a text blob offset, the same coordinate space `npb_row`/
 `npb_chapter` offsets use, resolved via the same binary-search primitive
 described above — so a bookmark survives a font-size switch exactly like
 the auto-resume position and chapter jumps do.
+
+`last_read_local` was appended after the original 652-byte layout without
+bumping the version: older 652-byte sidecars still load, with
+`last_read_local = 0`, and are rewritten at 656 bytes on the next save.
 
 Bookmark slot management policy is reader-UI behavior, not format —
 implemented in `reader.c` (see "What's implemented so far" below): a

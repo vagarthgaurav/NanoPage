@@ -13,6 +13,7 @@
 #include "power.h"
 #include "reader.h"
 #include "reader_menu.h"
+#include "rtc.h"
 #include "sd.h"
 #include "text.h"
 
@@ -171,12 +172,16 @@ static uint32_t current_blob_offset(void)
 static void save_bookmark(void)
 {
 	struct fs_file_t f;
+	uint32_t minutes;
 	int ret;
 
 	memcpy(bmk_state.magic, NPB_BOOKMARK_MAGIC, sizeof(bmk_state.magic));
 	bmk_state.version = NPB_BOOKMARK_VERSION;
 	bmk_state.last_font_id = last_font_id;
 	bmk_state.last_position = last_blob_offset;
+	if (app_rtc_get_minutes_since_2000(&minutes) == 0) {
+		bmk_state.last_read_local = minutes;
+	}
 
 	fs_file_t_init(&f);
 	ret = fs_open(&f, bmk_path, FS_O_CREATE | FS_O_WRITE);
@@ -278,10 +283,11 @@ static void load_bookmark(void)
 		return;
 	}
 
+	memset(&on_disk, 0, sizeof(on_disk));
 	ret = fs_read(&f, &on_disk, sizeof(on_disk));
 	fs_close(&f);
 
-	if (ret != sizeof(on_disk) ||
+	if ((ret != NPB_BOOKMARK_FILE_SIZE_V1 && ret != sizeof(on_disk)) ||
 	    memcmp(on_disk.magic, NPB_BOOKMARK_MAGIC, sizeof(on_disk.magic)) != 0) {
 		return;
 	}

@@ -20,6 +20,12 @@ int app_rtc_get_time(struct rtc_time *now);
  */
 int app_rtc_set_time(const struct rtc_time *t);
 
+/* Minutes since 2000-01-01 00:00 on the RTC's local wall clock, into *out.
+ * Returns 0 on success, negative errno if the RTC read failed or the time is
+ * before 2000.
+ */
+int app_rtc_get_minutes_since_2000(uint32_t *out);
+
 /* Read the current RTC time and print it via printk. */
 void app_rtc_log_time(void);
 
