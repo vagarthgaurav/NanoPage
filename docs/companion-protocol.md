@@ -2,9 +2,11 @@
 
 Status: **in progress.** Slice 1 (BT stack, companion mode, pairing,
 `DEVICE_INFO`, `TIME`) is built. The library service (`LIST`, `CHAPTERS`,
-`src/ble/companion_library.c`) is implemented but not yet verified on hardware;
-delete and calendar are declared in the GATT table but stubbed. The wire format is final for
-`proto_version` 1 and lives in `Firmware/src/ble/companion_proto.h`.
+`src/ble/companion_library.c`) is implemented; `LIST` was verified on hardware
+(2026-10-14: full scan of the real library completed with an END frame, status
+0), while `CHAPTERS`, storage-busy and the empty-card case are still
+unverified. Delete and calendar are declared in the GATT table but stubbed.
+The wire format is final for `proto_version` 2 and lives in `Firmware/src/ble/companion_proto.h`.
 
 The phone app lives in a separate repo, `NanoPage-companion-app`
 (`~/Projects/Software/NanoPage-companion-app`, Flutter, Android and iOS). Its
@@ -70,7 +72,7 @@ or the display owns the SD bus), CRC mismatch, not found, too large.
 
 ### Library records (`LIST` response)
 
-One per book: `book_id` (path relative to the SD root, <= 64 bytes, NUL
+One per book: `book_id` (path relative to the SD root, <= 128 bytes, NUL
 padded), `title[64]`, `author[64]`, `file_size u32`, `text_blob_size u32`,
 `last_position u32`, `chapter_count u16`, `last_read_local u32` (0 if
 unknown). Title, author and chapter fields are exactly what `npb_header` and
@@ -79,6 +81,10 @@ unknown). Title, author and chapter fields are exactly what `npb_header` and
 (`npb_bookmark_format.h`). `CHAPTERS` returns `{title[64], text_offset u32}`
 records. The app computes progress as `last_position / text_blob_size` and
 treats >= 99% as finished (there is no finished flag on the device).
+The `LIB_CTRL` command for `CHAPTERS`/`DELETE` is therefore 1 + 128 = 129
+bytes and needs an MTU of at least 132 (firmware allows 247), because long
+(offset) writes are not supported on `LIB_CTRL`. Books whose path exceeds 128
+bytes are skipped by `LIST`.
 
 ### Calendar payload
 
@@ -109,6 +115,9 @@ list rebuilt when the UTC offset changes (DST).
   active, and the user sees the passkey on the screen.
 - `bt_enable()` is called when companion mode starts and `bt_disable()` when
   it ends, so the stack is fully down in normal operation.
+- 2026-10-14: `book_id` widened from 64 to 128 bytes and `proto_version` bumped
+  to 2 (real library paths exceed 64 bytes). The phone app's Dart mirror must
+  be updated to match.
 
 ## Firmware work
 

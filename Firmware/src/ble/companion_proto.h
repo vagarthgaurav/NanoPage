@@ -14,7 +14,7 @@
 
 #include <stdint.h>
 
-#define APP_COMPANION_PROTO_VERSION 1
+#define APP_COMPANION_PROTO_VERSION 2
 
 /*
  * 128-bit UUIDs. Service and characteristics share one base; only the first
@@ -81,12 +81,12 @@ struct app_companion_time {
 
 /* --- LIB_CTRL (write) --- */
 
-#define APP_COMPANION_BOOK_ID_LEN 64 /* path relative to the SD root, NUL padded */
+#define APP_COMPANION_BOOK_ID_LEN 128 /* path relative to the SD root, NUL padded */
 
 enum app_companion_lib_op {
 	APP_COMPANION_LIB_LIST = 0x01,     /* no args */
-	APP_COMPANION_LIB_CHAPTERS = 0x02, /* book_id[64] */
-	APP_COMPANION_LIB_DELETE = 0x03,   /* book_id[64] */
+	APP_COMPANION_LIB_CHAPTERS = 0x02, /* book_id[128] */
+	APP_COMPANION_LIB_DELETE = 0x03,   /* book_id[128] */
 };
 
 struct app_companion_lib_cmd {
