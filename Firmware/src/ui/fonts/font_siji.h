@@ -14,6 +14,7 @@ enum app_text_icon {
 	APP_TEXT_ICON_BATTERY_MAX = 12, /* MIN..MAX = 9 fill levels, empty to full */
 	APP_TEXT_ICON_SETTINGS = 13,
 	APP_TEXT_ICON_BOOKMARK = 14,
+	APP_TEXT_ICON_CALENDAR = 15,
 };
 
 #define APP_TEXT_ICON_BATTERY_LEVELS \
