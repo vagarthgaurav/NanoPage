@@ -23,6 +23,7 @@ target_sources(app PRIVATE
 	src/ui/screens/menu.c
 	src/ui/screens/browser.c
 	src/ui/screens/settings.c
+	src/ui/screens/calendar_day.c
 	src/ui/screens/reader.c
 	src/ui/screens/reader_menu.c
 	src/ui/screens/toc.c

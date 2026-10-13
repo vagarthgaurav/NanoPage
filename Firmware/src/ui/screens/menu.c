@@ -6,6 +6,7 @@
 
 #include "browser.h"
 #include "buttons.h"
+#include "calendar_day.h"
 #include "font_siji.h"
 #include "header.h"
 #include "list_widget.h"
@@ -18,6 +19,7 @@
 #define APP_MENU_NAME_COL      5
 
 static void launch_browser(void);
+static void launch_calendar(void);
 static void launch_settings(void);
 
 struct menu_entry {
@@ -28,6 +30,7 @@ struct menu_entry {
 
 static const struct menu_entry entries[] = {
 	{"File Browser", APP_TEXT_ICON_FOLDER, launch_browser},
+	{"Calendar", APP_TEXT_ICON_CALENDAR, launch_calendar},
 	{"Settings", APP_TEXT_ICON_SETTINGS, launch_settings},
 };
 
@@ -78,6 +81,12 @@ static void launch_browser(void)
 	} else {
 		printk("menu: file browser unavailable (no SD card?)\n");
 	}
+}
+
+static void launch_calendar(void)
+{
+	app_calendar_day_show(app_menu_show);
+	menu_active = false;
 }
 
 static void launch_settings(void)

@@ -48,6 +48,11 @@ int app_text_set_cursor(uint16_t row, uint16_t col, bool visible);
 
 int app_text_draw_hline(uint16_t row, uint16_t y_in_row, bool black);
 
+int app_text_draw_hline_span(uint16_t row, uint16_t y_in_row, uint16_t x0, uint16_t x1_exclusive,
+			     bool black);
+
+uint16_t app_text_width_px(void);
+
 int app_text_flush(void);
 
 int app_text_full_refresh(void);

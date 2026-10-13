@@ -1,11 +1,13 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
+#include <stdio.h>
 #include <zephyr/drivers/rtc.h>
 #include <zephyr/kernel.h>
 
 #include "bookmarks.h"
 #include "browser.h"
 #include "buttons.h"
+#include "calendar_day.h"
 #include "charger.h"
 #include "config.h"
 #include "display.h"
@@ -40,6 +42,13 @@ static void on_header_event(void)
 		folder = "Apps";
 	} else if (app_settings_is_active()) {
 		folder = "Settings";
+	} else if (app_calendar_day_is_active()) {
+		static char date[24];
+
+		if (app_calendar_day_format_date(date, sizeof(date)) != 0) {
+			snprintf(date, sizeof(date), "Calendar");
+		}
+		folder = date;
 	} else if (app_reader_menu_is_active()) {
 		folder = "Menu";
 	} else if (app_toc_is_active()) {

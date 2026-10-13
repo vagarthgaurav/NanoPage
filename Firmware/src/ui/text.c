@@ -331,6 +331,33 @@ int app_text_draw_hline(uint16_t row, uint16_t y_in_row, bool black)
 	return 0;
 }
 
+int app_text_draw_hline_span(uint16_t row, uint16_t y_in_row, uint16_t x0, uint16_t x1_exclusive,
+			     bool black)
+{
+	uint16_t row_height = font_entry(cur_font)->height;
+	uint16_t x1 = MIN(x1_exclusive, fb_width);
+	uint16_t py;
+
+	if (!fb_buf || row >= grid_rows || y_in_row >= row_height || x0 >= x1) {
+		return -EINVAL;
+	}
+
+	py = row * row_height + y_in_row;
+
+	for (uint16_t x = x0; x < x1; x++) {
+		set_pixel(x, py, black);
+	}
+
+	mark_dirty_px(row * row_height, row_height, x0, x1);
+
+	return 0;
+}
+
+uint16_t app_text_width_px(void)
+{
+	return fb_width;
+}
+
 int app_text_draw_row(uint16_t row, const char *str)
 {
 	size_t len;
