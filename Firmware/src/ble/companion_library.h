@@ -3,6 +3,7 @@
 #ifndef APP_COMPANION_LIBRARY_H_
 #define APP_COMPANION_LIBRARY_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <zephyr/bluetooth/conn.h>
 
@@ -19,5 +20,11 @@ typedef int (*app_companion_lib_send_t)(struct bt_conn *conn, const uint8_t *dat
  */
 int app_companion_lib_submit(struct bt_conn *conn, const void *cmd, uint16_t len,
 			     app_companion_lib_send_t send);
+
+/* SD usage in KiB as of the last library request that mounted the card (LIST,
+ * CHAPTERS, DELETE). Returns false if none has completed yet. Never touches the
+ * card, so it is safe from the BT RX thread.
+ */
+bool app_companion_lib_get_sd_usage(uint32_t *free_kb, uint32_t *total_kb);
 
 #endif /* APP_COMPANION_LIBRARY_H_ */

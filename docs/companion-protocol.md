@@ -65,6 +65,11 @@ integers little-endian, same as the `.npb` format.
 | `CAL_DATA` | write without response | payload chunks |
 | `CAL_STATUS` | notify | `op u8, status u8`: outcome of `BEGIN` and `COMMIT` |
 
+`DEVICE_INFO` never touches the SD card: `sd_free_kb` / `sd_total_kb` (KiB) are
+the values cached from the last library request (`LIST`, `CHAPTERS`, `DELETE`)
+and stay unknown (`0xFFFFFFFF`) until the first one completes, so the phone
+should re-read `DEVICE_INFO` after `LIST`.
+
 `LIB_DATA` is a byte stream of frames (`type u8, len u16, payload`), a frame
 may span notifications, a response ends with one `END` frame
 (`op u8, status u8`). Exact layouts and the UUIDs are in `companion_proto.h`.

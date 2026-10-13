@@ -9,6 +9,7 @@
 #include <zephyr/fs/fs.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
+#include <zephyr/spinlock.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/printk.h>
 
@@ -56,6 +57,11 @@ static struct {
 	uint16_t stage_len;
 	int err; /* first send error; once set, nothing more is sent */
 } req;
+
+/* Written by the work thread, read from the BT RX thread (DEVICE_INFO). */
+static struct k_spinlock usage_lock;
+static uint32_t usage_free_kb = APP_COMPANION_SD_SIZE_UNKNOWN;
+static uint32_t usage_total_kb = APP_COMPANION_SD_SIZE_UNKNOWN;
 
 static char vpath[VPATH_LEN]; /* "/dir/book.npb": SD-relative with leading slash */
 static char full_path[APP_SD_MAX_PATH_LEN];
@@ -489,6 +495,8 @@ static void lib_work_handler(struct k_work *work)
 	enum app_companion_status status;
 	uint8_t op = req.cmd.op;
 	bool sd_up = false;
+	uint32_t free_kb;
+	uint32_t total_kb;
 	int ret;
 
 	ARG_UNUSED(work);
@@ -528,6 +536,15 @@ static void lib_work_handler(struct k_work *work)
 		break;
 	}
 
+	/* Still mounted here; after DELETE this picks up the freed space. */
+	if (app_sd_get_usage(&free_kb, &total_kb) == 0) {
+		k_spinlock_key_t key = k_spin_lock(&usage_lock);
+
+		usage_free_kb = free_kb;
+		usage_total_kb = total_kb;
+		k_spin_unlock(&usage_lock, key);
+	}
+
 done:
 	/* Release the card before the END frame, which can block on the phone. */
 	if (sd_up) {
@@ -544,6 +561,17 @@ done:
 	bt_conn_unref(req.conn);
 	req.conn = NULL;
 	atomic_clear(&busy);
+}
+
+bool app_companion_lib_get_sd_usage(uint32_t *free_kb, uint32_t *total_kb)
+{
+	k_spinlock_key_t key = k_spin_lock(&usage_lock);
+
+	*free_kb = usage_free_kb;
+	*total_kb = usage_total_kb;
+	k_spin_unlock(&usage_lock, key);
+
+	return *total_kb != APP_COMPANION_SD_SIZE_UNKNOWN;
 }
 
 int app_companion_lib_submit(struct bt_conn *conn, const void *cmd, uint16_t len,

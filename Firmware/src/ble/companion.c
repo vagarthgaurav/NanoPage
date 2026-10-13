@@ -319,8 +319,16 @@ static ssize_t read_device_info(struct bt_conn *conn, const struct bt_gatt_attr 
 		.sd_free_kb = APP_COMPANION_SD_SIZE_UNKNOWN,
 		.sd_total_kb = APP_COMPANION_SD_SIZE_UNKNOWN,
 	};
+	uint32_t sd_free_kb;
+	uint32_t sd_total_kb;
 
 	strncpy(info.fw_version, APP_COMPANION_FW_VERSION, sizeof(info.fw_version) - 1);
+
+	/* Locals: the struct is packed, no pointers into it. */
+	if (app_companion_lib_get_sd_usage(&sd_free_kb, &sd_total_kb)) {
+		info.sd_free_kb = sd_free_kb;
+		info.sd_total_kb = sd_total_kb;
+	}
 
 	if (app_fuel_gauge_get_percent(&info.battery_pct)) {
 		info.battery_pct = 0xFF;

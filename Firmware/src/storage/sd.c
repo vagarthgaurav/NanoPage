@@ -207,6 +207,33 @@ int app_sd_full_path(const char *path, char *out, size_t out_size)
 	return 0;
 }
 
+int app_sd_get_usage(uint32_t *free_kb, uint32_t *total_kb)
+{
+	struct fs_statvfs stat;
+	uint64_t total;
+	uint64_t free;
+	int ret;
+
+	if (!sd_mounted) {
+		return -ENODEV;
+	}
+
+	ret = fs_statvfs(DISK_MOUNT_PT, &stat);
+	if (ret) {
+		printk("SD: statvfs failed (%d)\n", ret);
+		return ret;
+	}
+
+	total = (uint64_t)stat.f_blocks * stat.f_frsize / 1024;
+	free = (uint64_t)stat.f_bfree * stat.f_frsize / 1024;
+
+	/* 0xFFFFFFFF is the companion protocol's "unknown" marker */
+	*total_kb = MIN(total, UINT32_MAX - 1);
+	*free_kb = MIN(free, UINT32_MAX - 1);
+
+	return 0;
+}
+
 int app_sd_list_dir(const char *path, struct app_sd_dirent *entries, size_t max_entries,
 		     size_t *count)
 {

@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #define APP_SD_DISK_NAME "SD"
 
@@ -30,6 +31,11 @@ struct app_sd_dirent {
 
 int app_sd_list_dir(const char *path, struct app_sd_dirent *entries, size_t max_entries,
 		     size_t *count);
+
+/* Free and total space in KiB, clamped below UINT32_MAX. Needs app_sd_init();
+ * -ENODEV if the card is not mounted.
+ */
+int app_sd_get_usage(uint32_t *free_kb, uint32_t *total_kb);
 
 int app_sd_full_path(const char *path, char *out, size_t out_size);
 
