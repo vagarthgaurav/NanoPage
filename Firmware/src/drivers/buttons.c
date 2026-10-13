@@ -11,10 +11,12 @@
 static const struct device *const buttons_dev = DEVICE_DT_GET(DT_PATH(buttons));
 
 static const struct device *const longpress_dev = DEVICE_DT_GET(DT_NODELABEL(action_longpress));
+static const struct device *const nav_longpress_dev = DEVICE_DT_GET(DT_NODELABEL(nav_longpress));
 
 static void (*press_cb)(enum app_button button);
 static void (*long_press_cb)(void);
 static void (*combo_cb)(void);
+static void (*hold_cb)(enum app_button button);
 
 static bool prev_held;
 static bool action_held;
@@ -49,6 +51,15 @@ static void button_event_cb(struct input_event *evt, void *user_data)
 
 	switch (evt->code) {
 	case INPUT_KEY_LEFT:
+		if (evt->dev == nav_longpress_dev) {
+			if (evt->value && hold_cb && press_cb) {
+				press_cb(APP_BUTTON_PREV);
+			}
+			break;
+		}
+		if (hold_cb) {
+			break;
+		}
 		if (!combo_cb) {
 			if (evt->value && press_cb) {
 				press_cb(APP_BUTTON_PREV);
@@ -73,8 +84,27 @@ static void button_event_cb(struct input_event *evt, void *user_data)
 		}
 		break;
 	case INPUT_KEY_RIGHT:
+		if (evt->dev == nav_longpress_dev) {
+			if (evt->value && hold_cb && press_cb) {
+				press_cb(APP_BUTTON_NEXT);
+			}
+			break;
+		}
+		if (hold_cb) {
+			break;
+		}
 		if (evt->value && press_cb) {
 			press_cb(APP_BUTTON_NEXT);
+		}
+		break;
+	case INPUT_KEY_PAGEUP:
+		if (evt->dev == nav_longpress_dev && evt->value && hold_cb) {
+			hold_cb(APP_BUTTON_PREV);
+		}
+		break;
+	case INPUT_KEY_PAGEDOWN:
+		if (evt->dev == nav_longpress_dev && evt->value && hold_cb) {
+			hold_cb(APP_BUTTON_NEXT);
 		}
 		break;
 	case INPUT_KEY_ENTER:
@@ -125,6 +155,11 @@ void app_buttons_set_press_callback(void (*cb)(enum app_button button))
 void app_buttons_set_long_press_callback(void (*cb)(void))
 {
 	long_press_cb = cb;
+}
+
+void app_buttons_set_hold_callback(void (*cb)(enum app_button button))
+{
+	hold_cb = cb;
 }
 
 void app_buttons_set_combo_callback(void (*cb)(void))

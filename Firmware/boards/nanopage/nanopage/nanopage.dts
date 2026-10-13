@@ -56,8 +56,8 @@
 	 * Action handling now fires on release rather than on press - see
 	 * buttons.c) or INPUT_KEY_MENU (held >= 500ms), which reader.c uses
 	 * to open the in-book menu (Table of Contents/Bookmarks) - see
-	 * reader_menu.h. Prev/Next are deliberately left unwrapped so paging
-	 * stays instant. CONFIG_INPUT_LONGPRESS is enabled automatically
+	 * reader_menu.h. Prev/Next are not wrapped by this node so paging
+	 * stays instant; see nav_longpress below. CONFIG_INPUT_LONGPRESS is enabled automatically
 	 * (default y, gated on this node existing - see subsys/input/Kconfig).
 	 */
 	action_longpress: longpress {
@@ -66,6 +66,21 @@
 		input-codes = <INPUT_KEY_ENTER>;
 		short-codes = <INPUT_KEY_ENTER>;
 		long-codes = <INPUT_KEY_MENU>;
+		long-delay-ms = <500>;
+	};
+
+	/*
+	 * Prev/Next hold detection. Only matters while a screen registers a
+	 * hold callback (app_buttons_set_hold_callback); buttons.c ignores
+	 * this node's events otherwise, so Prev/Next stay instant on the raw
+	 * buttons_input event. PAGEUP = hold Prev, PAGEDOWN = hold Next.
+	 */
+	nav_longpress: longpress-nav {
+		compatible = "zephyr,input-longpress";
+		input = <&buttons_input>;
+		input-codes = <INPUT_KEY_LEFT INPUT_KEY_RIGHT>;
+		short-codes = <INPUT_KEY_LEFT INPUT_KEY_RIGHT>;
+		long-codes = <INPUT_KEY_PAGEUP INPUT_KEY_PAGEDOWN>;
 		long-delay-ms = <500>;
 	};
 
