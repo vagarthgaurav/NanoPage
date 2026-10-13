@@ -13,6 +13,7 @@ enum app_text_icon {
 	APP_TEXT_ICON_BOOKMARK = 4,
 	APP_TEXT_ICON_CALENDAR = 5,
 	APP_TEXT_ICON_BOOK = 6,
+	APP_TEXT_ICON_BLUETOOTH = 7,
 };
 
 extern const struct cfb_font font_icons;

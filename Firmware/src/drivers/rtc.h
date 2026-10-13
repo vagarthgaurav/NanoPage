@@ -12,6 +12,14 @@ int app_rtc_init(void);
 /* Read the current RTC time. Returns 0 on success, negative errno on failure. */
 int app_rtc_get_time(struct rtc_time *now);
 
+/* Set the RTC. Uses tm_year/mon/mday/hour/min/sec; tm_wday is recomputed from
+ * the date (the caller's value is ignored). The minute-tick alarm armed via
+ * app_rtc_set_alarm() lives in separate registers and keeps working. Safe from
+ * any thread. Returns 0 on success, -EINVAL for an out-of-range time (the RTC
+ * only holds 2000..2099), or the driver's negative errno.
+ */
+int app_rtc_set_time(const struct rtc_time *t);
+
 /* Read the current RTC time and print it via printk. */
 void app_rtc_log_time(void);
 

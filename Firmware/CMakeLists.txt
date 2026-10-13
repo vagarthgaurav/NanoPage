@@ -36,6 +36,8 @@ target_sources(app PRIVATE
 	src/storage/sd.c
 	src/book/npb.c
 	src/usb/usb_msc.c
+	src/ble/companion.c
+	src/ui/screens/companion_screen.c
 )
 
 target_include_directories(app PRIVATE
@@ -50,4 +52,5 @@ target_include_directories(app PRIVATE
 	src/storage
 	src/book
 	src/usb
+	src/ble
 )

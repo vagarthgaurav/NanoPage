@@ -9,6 +9,8 @@
 #include "buttons.h"
 #include "calendar_day.h"
 #include "charger.h"
+#include "companion.h"
+#include "companion_screen.h"
 #include "config.h"
 #include "display.h"
 #include "footer.h"
@@ -42,6 +44,8 @@ static void on_header_event(void)
 		folder = "Apps";
 	} else if (app_settings_is_active()) {
 		folder = "Settings";
+	} else if (app_companion_screen_is_active()) {
+		folder = "Phone";
 	} else if (app_calendar_day_is_active()) {
 		static char date[24];
 
@@ -133,6 +137,7 @@ int main(void)
 
 		app_rtc_set_alarm(&minute_tick, RTC_ALARM_TIME_MASK_SECOND, on_header_event);
 		app_charger_set_change_callback(on_header_event);
+		app_companion_set_link_callback(on_header_event);
 	}
 
 	return 0;

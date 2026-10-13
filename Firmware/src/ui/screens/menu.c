@@ -7,6 +7,7 @@
 #include "browser.h"
 #include "buttons.h"
 #include "calendar_day.h"
+#include "companion_screen.h"
 #include "font_icons.h"
 #include "header.h"
 #include "list_widget.h"
@@ -20,6 +21,7 @@
 
 static void launch_browser(void);
 static void launch_calendar(void);
+static void launch_companion(void);
 static void launch_settings(void);
 
 struct menu_entry {
@@ -31,6 +33,7 @@ struct menu_entry {
 static const struct menu_entry entries[] = {
 	{"File Browser", APP_TEXT_ICON_FOLDER, launch_browser},
 	{"Calendar", APP_TEXT_ICON_CALENDAR, launch_calendar},
+	{"Connect to phone", APP_TEXT_ICON_BLUETOOTH, launch_companion},
 	{"Settings", APP_TEXT_ICON_SETTINGS, launch_settings},
 };
 
@@ -86,6 +89,12 @@ static void launch_browser(void)
 static void launch_calendar(void)
 {
 	app_calendar_day_show(app_menu_show);
+	menu_active = false;
+}
+
+static void launch_companion(void)
+{
+	app_companion_screen_show(app_menu_show);
 	menu_active = false;
 }
 

@@ -40,6 +40,13 @@
 
 #define APP_SD_POWER_UP_DELAY_MS 20
 
+/* --- Phone companion (companion.c) --- */
+
+/* How long advertising stays on after "Connect to phone" before the radio is
+ * switched back off. A connected link is not subject to this.
+ */
+#define APP_COMPANION_ADV_TIMEOUT_SEC 120
+
 /* --- Fuel gauge / charging (fuel_gauge.c) --- */
 
 #define APP_CHARGE_COMPLETE_VOLTAGE_MV 4100

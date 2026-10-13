@@ -69,6 +69,49 @@ int app_rtc_get_time(struct rtc_time *now)
 	return ret;
 }
 
+/* Sakamoto's day-of-week algorithm; the PCF85063A stores tm_wday verbatim and
+ * app_rtc_format_date() reads it back, so it has to be right.
+ */
+static int day_of_week(int year, int month, int day)
+{
+	static const int offset[12] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+
+	if (month < 3) {
+		year--;
+	}
+
+	return (year + year / 4 - year / 100 + year / 400 + offset[month - 1] + day) % 7;
+}
+
+int app_rtc_set_time(const struct rtc_time *t)
+{
+	struct rtc_time set_time = {
+		.tm_year = t->tm_year,
+		.tm_mon = t->tm_mon,
+		.tm_mday = t->tm_mday,
+		.tm_hour = t->tm_hour,
+		.tm_min = t->tm_min,
+		.tm_sec = t->tm_sec,
+	};
+	int ret;
+
+	if (t->tm_mon < 0 || t->tm_mon > 11) {
+		return -EINVAL;
+	}
+
+	set_time.tm_wday = day_of_week(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday);
+
+	app_i2c1_lock();
+	ret = rtc_set_time(rtc_dev, &set_time);
+	app_i2c1_unlock();
+
+	if (ret) {
+		printk("rtc_set_time failed: %d\n", ret);
+	}
+
+	return ret;
+}
+
 void app_rtc_log_time(void)
 {
 	struct rtc_time now;

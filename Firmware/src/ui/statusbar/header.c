@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "charger.h"
+#include "companion.h"
 #include "fuel_gauge.h"
 #include "font_icons.h"
 #include "header.h"
@@ -14,6 +15,9 @@
 #define APP_HEADER_BATTERY_COLS     (APP_TEXT_BATTERY_WIDTH_PX / 6) /* 6px cell width */
 /* No whole-column gap before the battery: its glyph already starts with 3 blank pixels. */
 #define APP_HEADER_PERCENT_GAP_COLS 0
+/* Blank columns between the phone-link icon and the percentage. */
+#define APP_HEADER_LINK_GAP_COLS    1
+#define APP_HEADER_ICON_COLS        2 /* 12px icon cell / 6px text cell */
 
 static void draw_str(uint16_t row, uint16_t col, const char *str, size_t len)
 {
@@ -27,6 +31,7 @@ static char last_date_buf[24];
 static uint8_t last_percent;
 static bool last_charging;
 static bool last_bookmarked;
+static bool last_linked;
 static char last_folder[128];
 
 int app_header_update(const char *folder, bool bookmarked)
@@ -40,7 +45,7 @@ int app_header_update(const char *folder, bool bookmarked)
 	int date_col, battery_col, percent_col;
 	enum app_text_battery icon;
 	uint8_t percent, level;
-	bool charging;
+	bool charging, linked;
 	int ret;
 
 	ret = app_rtc_get_time(&now);
@@ -63,9 +68,10 @@ int app_header_update(const char *folder, bool bookmarked)
 		percent = 100;
 	}
 	charging = app_charger_is_charging();
+	linked = app_companion_get_state() == APP_COMPANION_STATE_CONNECTED;
 
 	if (have_last && strcmp(date_buf, last_date_buf) == 0 && percent == last_percent &&
-	    charging == last_charging && bookmarked == last_bookmarked &&
+	    charging == last_charging && linked == last_linked && bookmarked == last_bookmarked &&
 	    strncmp(folder, last_folder, sizeof(last_folder)) == 0) {
 		return 0;
 	}
@@ -74,6 +80,7 @@ int app_header_update(const char *folder, bool bookmarked)
 	memcpy(last_date_buf, date_buf, date_len + 1);
 	last_percent = percent;
 	last_charging = charging;
+	last_linked = linked;
 	last_bookmarked = bookmarked;
 	snprintf(last_folder, sizeof(last_folder), "%s", folder);
 
@@ -105,6 +112,15 @@ int app_header_update(const char *folder, bool bookmarked)
 		percent_col = 0;
 	}
 	draw_str(APP_HEADER_ROW, (uint16_t)percent_col, percent_buf, percent_len);
+
+	if (linked) {
+		int link_col = percent_col - APP_HEADER_LINK_GAP_COLS - APP_HEADER_ICON_COLS;
+
+		if (link_col >= 0) {
+			app_text_draw_icon(APP_HEADER_ROW, app_text_col_to_px((uint16_t)link_col),
+					   APP_TEXT_ICON_BLUETOOTH);
+		}
+	}
 
 	if (charging) {
 		icon = APP_TEXT_BATTERY_CHARGING;

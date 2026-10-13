@@ -21,6 +21,7 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
+		zephyr,settings-partition = &settings_partition;
 		zephyr,display = &epd_panel;
 	};
 
@@ -327,9 +328,22 @@ zephyr_udc0: &usbd {
 		 */
 		slot0_partition: partition@0 {
 			label = "image-0";
-			reg = <0x00000000 DT_SIZE_K(992)>;
+			reg = <0x00000000 DT_SIZE_K(976)>;
 		};
 
+		/* Zephyr settings subsystem (NVS backend): BLE bonding keys.
+		 * Separate from storage_partition because settings and
+		 * fuel_gauge.c's raw NVS use would otherwise fight over the
+		 * same sectors. Carved out of the app image area rather than
+		 * out of storage_partition: shrinking that one made the fuel
+		 * gauge's existing NVS state fail to mount.
+		 */
+		settings_partition: partition@f4000 {
+			label = "settings";
+			reg = <0x000f4000 DT_SIZE_K(16)>;
+		};
+
+		/* Fuel gauge learned parameters (raw NVS, fuel_gauge.c). */
 		storage_partition: partition@f8000 {
 			label = "storage";
 			reg = <0x000f8000 DT_SIZE_K(32)>;
