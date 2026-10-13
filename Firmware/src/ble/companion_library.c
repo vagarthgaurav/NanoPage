@@ -185,25 +185,32 @@ static int open_book(void)
 	return 0;
 }
 
-/* Reads last_position from "<dir>/.nanopage/<base>.bmk" for vpath; 0 if the
- * sidecar is missing or not ours. Only the first 12 bytes are needed.
- */
-static uint32_t read_last_position(void)
+/* Puts the full path of "<dir>/.nanopage/<base>.bmk" for vpath into full_path. */
+static int bookmark_full_path(void)
 {
-	uint8_t buf[offsetof(struct npb_bookmark_file, last_position) + sizeof(uint32_t)];
 	const char *slash = strrchr(vpath, '/'); /* always present, vpath starts with '/' */
 	size_t dir_len = slash - vpath;
-	uint32_t pos = 0;
-	ssize_t n;
 	int ret;
 
 	ret = snprintf(bmk_rel, sizeof(bmk_rel), "%.*s/" BMK_DIR "/%s.bmk", (int)dir_len, vpath,
 		       slash + 1);
 	if (ret < 0 || (size_t)ret >= sizeof(bmk_rel)) {
-		return 0;
+		return -ENAMETOOLONG;
 	}
 
-	if (app_sd_full_path(bmk_rel, full_path, sizeof(full_path))) {
+	return app_sd_full_path(bmk_rel, full_path, sizeof(full_path));
+}
+
+/* Reads last_position from the bookmark sidecar for vpath; 0 if the sidecar is
+ * missing or not ours. Only the first 12 bytes are needed.
+ */
+static uint32_t read_last_position(void)
+{
+	uint8_t buf[offsetof(struct npb_bookmark_file, last_position) + sizeof(uint32_t)];
+	uint32_t pos = 0;
+	ssize_t n;
+
+	if (bookmark_full_path()) {
 		return 0;
 	}
 
@@ -331,7 +338,7 @@ static enum app_companion_status op_list(void)
 
 /* Copies book_id into vpath after checking it can only name a .npb below the
  * SD root: no leading slash, no hidden or ".." components, no backslashes (FatFs
- * treats them as separators). A full 64 byte id has no NUL, as LIST emits them.
+ * treats them as separators). A full 128 byte id has no NUL, as LIST emits them.
  */
 static bool set_vpath_from_book_id(const char *book_id)
 {
@@ -419,11 +426,58 @@ static enum app_companion_status op_chapters(void)
 /* DELETE                                                             */
 /* ------------------------------------------------------------------ */
 
+/* Removes the bookmark sidecar first, then the book. If the book unlink then
+ * fails the book survives and only the reading position is lost; the other
+ * order could leave a stale sidecar that a re-added book of the same name would
+ * pick up.
+ */
 static enum app_companion_status op_delete(void)
 {
-	printk("library: delete not implemented\n");
+	struct fs_dirent *ent = &levels[0].ent; /* no scan is running, reuse its static */
+	int ret;
 
-	return APP_COMPANION_STATUS_BAD_REQUEST;
+	if (!set_vpath_from_book_id(req.cmd.book_id)) {
+		printk("library: DELETE rejected book_id\n");
+		return APP_COMPANION_STATUS_BAD_REQUEST;
+	}
+
+	ret = app_sd_full_path(vpath, full_path, sizeof(full_path));
+	if (ret) {
+		return APP_COMPANION_STATUS_BAD_REQUEST;
+	}
+
+	ret = fs_stat(full_path, ent);
+	if (ret == -ENOENT) {
+		return APP_COMPANION_STATUS_NOT_FOUND;
+	}
+	if (ret) {
+		printk("library: stat %s failed (%d)\n", vpath + 1, ret);
+		return APP_COMPANION_STATUS_INTERNAL;
+	}
+	if (ent->type != FS_DIR_ENTRY_FILE) {
+		return APP_COMPANION_STATUS_BAD_REQUEST;
+	}
+
+	if (bookmark_full_path() == 0) {
+		ret = fs_unlink(full_path);
+		if (ret && ret != -ENOENT) {
+			printk("library: unlink sidecar of %s failed (%d)\n", vpath + 1, ret);
+			return APP_COMPANION_STATUS_INTERNAL;
+		}
+	}
+
+	ret = app_sd_full_path(vpath, full_path, sizeof(full_path));
+	if (ret == 0) {
+		ret = fs_unlink(full_path);
+	}
+	if (ret) {
+		printk("library: unlink %s failed (%d)\n", vpath + 1, ret);
+		return APP_COMPANION_STATUS_INTERNAL;
+	}
+
+	printk("library: deleted %s\n", vpath + 1);
+
+	return APP_COMPANION_STATUS_OK;
 }
 
 /* ------------------------------------------------------------------ */

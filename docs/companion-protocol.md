@@ -5,7 +5,9 @@ Status: **in progress.** Slice 1 (BT stack, companion mode, pairing,
 `src/ble/companion_library.c`) is implemented; `LIST` was verified on hardware
 (2026-10-14: full scan of the real library completed with an END frame, status
 0), while `CHAPTERS`, storage-busy and the empty-card case are still
-unverified. Delete and calendar are declared in the GATT table but stubbed.
+unverified. `DELETE` is implemented and verified on hardware (2026-10-14): it removes the bookmark sidecar, then the book, and answers
+`not found` / `bad request` (bad id, or not a regular file) / `internal`
+(unlink failed). Calendar is declared in the GATT table but stubbed.
 The wire format is final for `proto_version` 2 and lives in `Firmware/src/ble/companion_proto.h`.
 
 The phone app lives in a separate repo, `NanoPage-companion-app`
@@ -138,7 +140,9 @@ commit before the user confirms.
    sidecar for `last_position`. Use the existing SD bring-up/teardown bracket
    and respect USB mass storage and display bus sharing (see the SD backfeed
    notes). If the card is busy return `storage busy` rather than blocking.
-4. **Delete** a book and its sidecar.
+4. **Delete** a book and its sidecar. Sidecar goes first so a failed book
+   unlink only loses the reading position and never leaves a stale bookmark
+   behind. The `book_id` gets the same validation as `CHAPTERS`.
 5. **Calendar store**: receive the blob, verify the CRC, write it atomically
    (temp file, then rename) to e.g. `.nanopage/calendar.bin`, and make
    `calendar_day.c` read it instead of its mock events. The calendar day-view
