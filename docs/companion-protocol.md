@@ -1,8 +1,9 @@
 # NanoPage companion protocol (BLE) and the firmware work it needs
 
 Status: **in progress.** Slice 1 (BT stack, companion mode, pairing,
-`DEVICE_INFO`, `TIME`) is being built; library, delete and calendar are
-declared in the GATT table but stubbed. The wire format is final for
+`DEVICE_INFO`, `TIME`) is built. The library service (`LIST`, `CHAPTERS`,
+`src/ble/companion_library.c`) is implemented but not yet verified on hardware;
+delete and calendar are declared in the GATT table but stubbed. The wire format is final for
 `proto_version` 1 and lives in `Firmware/src/ble/companion_proto.h`.
 
 The phone app lives in a separate repo, `NanoPage-companion-app`

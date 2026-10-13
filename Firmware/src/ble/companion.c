@@ -16,6 +16,7 @@
 
 #include "charger.h"
 #include "companion.h"
+#include "companion_library.h"
 #include "companion_proto.h"
 #include "config.h"
 #include "fuel_gauge.h"
@@ -385,10 +386,35 @@ static ssize_t write_time(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 	return len;
 }
 
+static int lib_send(struct bt_conn *conn, const uint8_t *data, uint16_t len);
+
 static ssize_t write_lib_ctrl(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 			      const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
-	printk("companion: LIB_CTRL not implemented yet\n");
+	int err;
+
+	ARG_UNUSED(attr);
+	ARG_UNUSED(flags);
+
+	if (offset != 0) {
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+	}
+
+	/* Runs on the BT RX thread: the library service only queues the command. */
+	err = app_companion_lib_submit(conn, buf, len, lib_send);
+	if (err == -EINVAL) {
+		printk("companion: LIB_CTRL rejected (len %u)\n", len);
+		return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+	}
+	if (err == -EBUSY) {
+		/* The running request will end with its own END frame. */
+		printk("companion: LIB_CTRL busy\n");
+		return BT_GATT_ERR(BT_ATT_ERR_PREPARE_QUEUE_FULL);
+	}
+	if (err) {
+		return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+	}
+
 	return len;
 }
 
@@ -452,6 +478,25 @@ BT_GATT_SERVICE_DEFINE(companion_svc,
 			       BT_GATT_PERM_NONE, NULL, NULL, NULL),
 	BT_GATT_CCC(ccc_changed, CCC_PERM),
 );
+
+/* Called from the library worker thread; blocks for a TX buffer when the
+ * controller queue is full.
+ */
+static int lib_send(struct bt_conn *conn, const uint8_t *data, uint16_t len)
+{
+	const struct bt_gatt_attr *attr =
+		bt_gatt_find_by_uuid(companion_svc.attrs, companion_svc.attr_count, &uuid_lib_data.uuid);
+
+	if (attr == NULL) {
+		return -ENOENT;
+	}
+
+	if (!bt_gatt_is_subscribed(conn, attr, BT_GATT_CCC_NOTIFY)) {
+		return -EACCES;
+	}
+
+	return bt_gatt_notify_uuid(conn, &uuid_lib_data.uuid, companion_svc.attrs, data, len);
+}
 
 /* ------------------------------------------------------------------ */
 /* Session control                                                    */

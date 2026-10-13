@@ -37,6 +37,7 @@ target_sources(app PRIVATE
 	src/book/npb.c
 	src/usb/usb_msc.c
 	src/ble/companion.c
+	src/ble/companion_library.c
 	src/ui/screens/companion_screen.c
 )
 
