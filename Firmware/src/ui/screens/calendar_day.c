@@ -30,6 +30,9 @@
 #define APP_CALENDAR_LINE_MARGIN  4
 #define APP_CALENDAR_LINE_CAP_END 12
 
+/* Blank grid rows kept free above and below the content, so the list is not cramped. */
+#define APP_CALENDAR_MARGIN_ROWS 1
+
 #define APP_CALENDAR_MAX_EVENTS  32
 #define APP_CALENDAR_MAX_ALL_DAY 4
 
@@ -253,9 +256,10 @@ static void draw_event(uint16_t row, size_t idx, void *user_data)
  * right edge, centred on the cap. Tamzen 6x16 never inks pixel rows 0 and 15,
  * so between two rows the thin rule is y = 15 of the upper row and the cap is
  * y = 14..15 of the upper row plus y = 0 of the lower row. At the list edge
- * (only one side visible) everything goes inside the visible row: bottom edge
- * thin y = h-2, cap h-3..h-1 (rows 13-14 are blank); top edge thin y = 1, cap
- * 0..2 (only '$', '{' and '}' ink row 1). The cap covers just the cursor
+ * (only one side visible) everything goes inside the visible row: top edge thin
+ * y = 1, cap 0..2 (only '$', '{' and '}' ink row 1). At the bottom edge the
+ * line goes into the blank margin row below the list instead, thin y = 2, cap
+ * 1..3, so it keeps a gap from the last event. The cap covers just the cursor
  * columns, whose icon ink is in pixel rows 4-10, so it never touches text.
  *
  * It is drawn after the widget has drawn rows and cursor, because the cursor
@@ -281,11 +285,15 @@ static void draw_now_line(void)
 	size_t first = list.scroll_offset;
 	size_t end = MIN(first + list.content_rows, event_count());
 	uint16_t h = app_text_row_height();
+	uint16_t margin_row = (uint16_t)(list.content_start_row + list.content_rows);
 	bool upper, lower;
 
 	if (!now_line || event_count() == 0) {
 		return;
 	}
+
+	/* Clears a bottom-edge line left over from before a scroll. */
+	app_text_draw_row(margin_row, "");
 
 	upper = first_future > 0 && first_future - 1 >= first && first_future - 1 < end;
 	lower = first_future < event_count() && first_future >= first && first_future < end;
@@ -340,6 +348,11 @@ static void render_day(void)
 	uint16_t list_start = content_start_row;
 	uint16_t list_rows = content_rows;
 	bool today = (day_offset == 0);
+
+	for (uint16_t i = 0; i < APP_CALENDAR_MARGIN_ROWS; i++) {
+		app_text_draw_row((uint16_t)(content_start_row - 1 - i), "");
+		app_text_draw_row((uint16_t)(content_start_row + content_rows + i), "");
+	}
 
 	fill_day(day_offset);
 	count = event_count();
@@ -478,6 +491,8 @@ void app_calendar_day_show(void (*on_exit)(void))
 
 	app_text_get_grid(&grid_cols, &rows);
 	app_text_get_content_rows(&content_start_row, &content_rows);
+	content_start_row += APP_CALENDAR_MARGIN_ROWS;
+	content_rows -= 2 * APP_CALENDAR_MARGIN_ROWS;
 
 	read_today();
 
