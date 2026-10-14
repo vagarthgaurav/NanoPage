@@ -46,7 +46,9 @@ struct cal_event {
 	char title[APP_CALENDAR_STORE_TITLE_MAX + 1];
 };
 
-static const char *const weekday_name[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+static const char *const weekday_name[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+static const char *const month_name[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+					 "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
 
 /* Per-day state, refilled by fill_day() on every day change. */
 static struct cal_event day_events[APP_CALENDAR_MAX_EVENTS];
@@ -159,8 +161,8 @@ int app_calendar_day_format_date(char *buf, size_t len)
 	int y, n;
 
 	civil_from_days(days, &y, &m, &d);
-	n = snprintf(buf, len, "%s, %02u-%02u-%02d", weekday_name[((days % 7) + 7 + 4) % 7], m, d,
-		     y % 100);
+	n = snprintf(buf, len, "%s %u %s", weekday_name[((days % 7) + 7 + 4) % 7], d,
+		     month_name[m - 1]);
 
 	return (n < 0 || (size_t)n >= len) ? -ENOSPC : 0;
 }
