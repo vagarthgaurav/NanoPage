@@ -1,3 +1,4 @@
 (sym_lib_table
 	(version 7)
+	(lib (name "NanoPage") (type "KiCad") (uri "${KIPRJMOD}/libraries/NanoPage.kicad_sym") (options "") (descr "Project-local symbols"))
 )

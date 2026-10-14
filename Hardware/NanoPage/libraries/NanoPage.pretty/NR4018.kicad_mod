@@ -1,0 +1,155 @@
+(footprint "NR4018"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(property "Reference" "REF**"
+		(at 0 -3.1 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "d54a3f4e-b9f9-4513-b66e-718f5f9c2c25")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+		)
+	)
+	(property "Value" "NR4018"
+		(at 0 3.1 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "dd2af848-8e1d-492c-a112-f7611a0f498a")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" "https://www.lcsc.com/datasheet/C42370374.pdf?spm=wm.sxq.inf.ggs___wm.gwc.xh.8.cbm&lcsc_vid=RVRfBVEAFANbX1EEQVEPBlBXFVhcUAdQQlJXVFAEEVYxVlNRT1JfUFRQQlFcUTtW"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "e85be599-c5c1-473e-9884-6005970ea852")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" "Magnetsyc NR4018S470MT"
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "e7d924ea-e730-4bf5-b9fb-5ab920c10678")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -2.35 -2.15)
+		(end -2.35 -1.15)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "a6609e86-8615-437d-a7d4-e0df2a5c76fa")
+	)
+	(fp_line
+		(start -2.35 -2.15)
+		(end -0.2 -2.15)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "4e6fba59-2c60-49b1-873b-68e722e6eeb5")
+	)
+	(fp_line
+		(start -2.35 -1.15)
+		(end -2.35 -0.2)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "88538693-6627-4040-a37c-389da91220ca")
+	)
+	(fp_line
+		(start 0.15 2.1)
+		(end 2.3 2.1)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "fb151d49-2446-4d54-909a-5ac556ef4013")
+	)
+	(fp_line
+		(start 2.3 2.1)
+		(end 2.3 0.15)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "d4b317f3-a1e9-4a4c-b0fc-f6273a573112")
+	)
+	(fp_rect
+		(start -2.15 -1.95)
+		(end 2.15 1.95)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "425a2d26-5527-4b8c-aac9-e6983d420c1b")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 4.6 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "79dc343c-b966-4310-a4cd-1e1f777e6e71")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" smd rect
+		(at -1.5 0)
+		(size 1.1 3.7)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "9a37aa4e-147c-4878-9ebb-ff587e56f2f4")
+	)
+	(pad "2" smd rect
+		(at 1.5 0)
+		(size 1.1 3.7)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "4e38865e-54fa-4556-a1b6-a5aa25d31a69")
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/NR4018.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+)

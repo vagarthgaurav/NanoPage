@@ -493,7 +493,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "PCF85063ATL:PCF85063ATL_1,118"
+		(symbol "NanoPage:PCF85063ATL_1,118"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -521,7 +521,7 @@
 					(justify left top)
 				)
 			)
-			(property "Footprint" "SON50P260X260X50-11N"
+			(property "Footprint" "NanoPage:SON50P260X260X50-11N"
 				(at 31.75 -94.92 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -2126,7 +2126,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PCF85063ATL:PCF85063ATL_1,118")
+		(lib_id "NanoPage:PCF85063ATL_1,118")
 		(at 133.35 88.9 0)
 		(unit 1)
 		(body_style 1)
@@ -2156,7 +2156,7 @@
 				)
 			)
 		)
-		(property "Footprint" "PCF85063ATL:SON50P260X260X50-11N"
+		(property "Footprint" "NanoPage:SON50P260X260X50-11N"
 			(at 165.1 183.82 0)
 			(hide yes)
 			(show_name no)

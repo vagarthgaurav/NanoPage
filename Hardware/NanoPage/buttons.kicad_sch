@@ -603,7 +603,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "PTS526SM15SMTR2:PTS526SM15SMTR2_LFS"
+		(symbol "NanoPage:PTS526SM15SMTR2_LFS"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -631,7 +631,7 @@
 					(justify left top)
 				)
 			)
-			(property "Footprint" "PTS526SM15SMTR2LFS"
+			(property "Footprint" "NanoPage:PTS526SM15SMTR2LFS"
 				(at 26.67 -94.92 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -813,7 +813,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "SKRTLAE010:SKRTLAE010"
+		(symbol "NanoPage:SKRTLAE010"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -841,7 +841,7 @@
 					(justify left top)
 				)
 			)
-			(property "Footprint" "SKRTLAE010:SKRTLAE010"
+			(property "Footprint" "NanoPage:SKRTLAE010"
 				(at 19.05 -94.92 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -1069,7 +1069,7 @@
 					(justify left top)
 				)
 			)
-			(property "Footprint" "SKRTLAE010:SKRTLAE010"
+			(property "Footprint" "NanoPage:SKRTLAE010"
 				(at 19.05 -94.92 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -2905,7 +2905,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SKRTLAE010:SKRTLAE010")
+		(lib_id "NanoPage:SKRTLAE010")
 		(at 127 67.31 0)
 		(unit 1)
 		(body_style 1)
@@ -2935,7 +2935,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SKRTLAE010:SKRTLAE010"
+		(property "Footprint" "NanoPage:SKRTLAE010"
 			(at 146.05 162.23 0)
 			(hide yes)
 			(show_name no)
@@ -3299,7 +3299,7 @@
 	)
 	(symbol
 		(lib_name "SKRTLAE010_1")
-		(lib_id "SKRTLAE010:SKRTLAE010")
+		(lib_id "NanoPage:SKRTLAE010")
 		(at 35.56 132.08 0)
 		(unit 1)
 		(body_style 1)
@@ -3329,7 +3329,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SKRTLAE010:SKRTLAE010"
+		(property "Footprint" "NanoPage:SKRTLAE010"
 			(at 54.61 227 0)
 			(hide yes)
 			(show_name no)
@@ -3530,7 +3530,7 @@
 		)
 	)
 	(symbol
-		(lib_id "SKRTLAE010:SKRTLAE010")
+		(lib_id "NanoPage:SKRTLAE010")
 		(at 35.56 67.31 0)
 		(unit 1)
 		(body_style 1)
@@ -3560,7 +3560,7 @@
 				)
 			)
 		)
-		(property "Footprint" "SKRTLAE010:SKRTLAE010"
+		(property "Footprint" "NanoPage:SKRTLAE010"
 			(at 54.61 162.23 0)
 			(hide yes)
 			(show_name no)
@@ -3838,7 +3838,7 @@
 		)
 	)
 	(symbol
-		(lib_id "PTS526SM15SMTR2:PTS526SM15SMTR2_LFS")
+		(lib_id "NanoPage:PTS526SM15SMTR2_LFS")
 		(at 137.16 135.89 0)
 		(unit 1)
 		(body_style 1)
@@ -3868,7 +3868,7 @@
 				)
 			)
 		)
-		(property "Footprint" "PTS526SM15SMTR2LFS"
+		(property "Footprint" "NanoPage:PTS526SM15SMTR2LFS"
 			(at 163.83 230.81 0)
 			(hide yes)
 			(show_name no)
@@ -4094,7 +4094,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Personal Library:HC-FPC-05-09-5RLTAG"
+		(property "Footprint" "NanoPage:HC-FPC-05-09-5RLTAG"
 			(at 246.38 71.12 0)
 			(hide yes)
 			(show_name no)

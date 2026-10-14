@@ -5,7 +5,7 @@
 	(uuid "70d01e5d-6529-4eed-b4e0-47895a32eb99")
 	(paper "A4")
 	(lib_symbols
-		(symbol "BM03B-SRSS-TB(LF)(SN):BM03B-SRSS-TB_LF__SN_"
+		(symbol "NanoPage:BM03B-SRSS-TB_LF__SN_"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -33,7 +33,7 @@
 					(justify left top)
 				)
 			)
-			(property "Footprint" "BM03B-SRSS-TB(LF)(SN):BM03BSRSSTBLFSN"
+			(property "Footprint" "NanoPage:BM03BSRSSTBLFSN"
 				(at 19.05 -94.92 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -994,7 +994,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Personal Library:E73-2G4M08S1C-52840"
+		(symbol "NanoPage:E73-2G4M08S1C-52840"
 			(pin_names
 				(offset 1.016)
 			)
@@ -1023,7 +1023,7 @@
 					)
 				)
 			)
-			(property "Footprint" "E73-2G4M08S1C:E73-2G4M08S1C"
+			(property "Footprint" "NanoPage:E73-2G4M08S1C"
 				(at 1.016 -41.148 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -3748,7 +3748,7 @@
 		)
 	)
 	(symbol
-		(lib_id "BM03B-SRSS-TB(LF)(SN):BM03B-SRSS-TB_LF__SN_")
+		(lib_id "NanoPage:BM03B-SRSS-TB_LF__SN_")
 		(at 246.38 55.88 0)
 		(mirror y)
 		(unit 1)
@@ -3779,7 +3779,7 @@
 				)
 			)
 		)
-		(property "Footprint" "BM03B-SRSS-TB:BM03BSRSSTBLFSN"
+		(property "Footprint" "NanoPage:BM03BSRSSTBLFSN"
 			(at 227.33 150.8 0)
 			(hide yes)
 			(show_name no)
@@ -4368,7 +4368,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Personal Library:E73-2G4M08S1C-52840")
+		(lib_id "NanoPage:E73-2G4M08S1C-52840")
 		(at 110.49 81.28 0)
 		(unit 1)
 		(body_style 1)
@@ -4399,7 +4399,7 @@
 				)
 			)
 		)
-		(property "Footprint" "E73-2G4M08S1C:E73-2G4M08S1C"
+		(property "Footprint" "NanoPage:E73-2G4M08S1C"
 			(at 111.506 122.428 0)
 			(hide yes)
 			(show_name no)

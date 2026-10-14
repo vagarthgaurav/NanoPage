@@ -1197,7 +1197,7 @@
 			)
 		)
 	)
-	(footprint "Personal Library:L_CommonModeChoke_TDK_0503USB"
+	(footprint "NanoPage:L_CommonModeChoke_TDK_0503USB"
 		(layer "F.Cu")
 		(uuid "12cc9f9c-7d2d-4a30-ab7d-131459cfb90f")
 		(at 146.85 102.95)
@@ -1638,7 +1638,7 @@
 			)
 		)
 	)
-	(footprint "SKRTLAE010:SKRTLAE010"
+	(footprint "NanoPage:SKRTLAE010"
 		(locked yes)
 		(layer "F.Cu")
 		(uuid "1e31c980-a525-43c9-b5b4-c2e2f050ebf2")
@@ -2029,7 +2029,7 @@
 			(uuid "2575eaaa-87d4-4fd4-9cf8-1881b7efbc03")
 		)
 		(embedded_fonts no)
-		(model "SKRTLAE010.stp"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/SKRTLAE010.step"
 			(offset
 				(xyz 0.03 -0.5 1.73)
 			)
@@ -3061,7 +3061,7 @@
 			)
 		)
 	)
-	(footprint "E73-2G4M08S1C:E73-2G4M08S1C"
+	(footprint "NanoPage:E73-2G4M08S1C"
 		(locked yes)
 		(layer "F.Cu")
 		(uuid "2ed9b776-21dd-4e52-b6dc-55da438b7bd8")
@@ -3655,7 +3655,7 @@
 			)
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/E73-2G4M08S1C/E73-2G4M08S1C.step"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/E73-2G4M08S1C.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -5388,7 +5388,7 @@
 			(uuid "83bc5a30-5b08-4b2e-a973-d08f6a1cd833")
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/3D models/104031-0811.STEP"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/104031-0811.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -5710,7 +5710,7 @@
 			)
 		)
 	)
-	(footprint "PCF85063ATL:SON50P260X260X50-11N"
+	(footprint "NanoPage:SON50P260X260X50-11N"
 		(layer "F.Cu")
 		(uuid "47771b05-ea00-4532-b318-49f23bb63b04")
 		(at 114.25 117.5 180)
@@ -6051,7 +6051,7 @@
 			(uuid "bcf6b2a3-3cb3-4698-966b-3f47ae313b5c")
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/PCF85063ATL/PCF85063ATL.stp"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/PCF85063ATL.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -6063,7 +6063,7 @@
 			)
 		)
 	)
-	(footprint "Personal Library:HC-FPC-05-09-5RLTAG"
+	(footprint "NanoPage:HC-FPC-05-09-5RLTAG"
 		(layer "F.Cu")
 		(uuid "47a022e3-d083-44d1-aaca-919f7d7b4b7b")
 		(at 125.4 119.675)
@@ -6471,7 +6471,7 @@
 			)
 		)
 	)
-	(footprint "Personal Library:XUNPU FPC-05FB-24PH20"
+	(footprint "NanoPage:XUNPU FPC-05FB-24PH20"
 		(locked yes)
 		(layer "F.Cu")
 		(uuid "4f2f4094-353a-47ea-9517-70a869e91f36")
@@ -6968,7 +6968,7 @@
 			(uuid "a1aa8cf5-dee2-42bb-916a-df2605700b67")
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/3D models/FPC-05FB-24PH20.STEP"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/FPC-05FB-24PH20.step"
 			(offset
 				(xyz 0 -3.5 0)
 			)
@@ -7592,7 +7592,7 @@
 			)
 		)
 	)
-	(footprint "SM02B-SRSS-TB:SM02BSRSSTBLFSN"
+	(footprint "NanoPage:SM02BSRSSTBLFSN"
 		(layer "F.Cu")
 		(uuid "606e6738-59f1-424b-8ad8-0b7f940a5fba")
 		(at 168.188 92.2 90)
@@ -7939,7 +7939,7 @@
 			(uuid "2b0203ac-6971-443c-8031-f54ce4af2920")
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/3D models/SM02B-SRSS-TB (LF)(SN).STEP"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/SM02B-SRSS-TB.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -8806,7 +8806,7 @@
 			)
 		)
 	)
-	(footprint "MAX17055ETB-T:SON40P250X200X80-11N"
+	(footprint "NanoPage:SON40P250X200X80-11N"
 		(layer "F.Cu")
 		(uuid "68fb8aab-9db0-4f14-8e10-fdb8ce287a37")
 		(at 157.56 91.56 90)
@@ -9148,7 +9148,7 @@
 			(uuid "93668057-acd7-493c-86ec-6a09748d727f")
 		)
 		(embedded_fonts no)
-		(model "MAX17055ETB+T.stp"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/MAX17055ETB.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -9364,7 +9364,7 @@
 			)
 		)
 	)
-	(footprint "BM03B-SRSS-TB:BM03BSRSSTBLFSN"
+	(footprint "NanoPage:BM03BSRSSTBLFSN"
 		(layer "F.Cu")
 		(uuid "71319987-42d8-4b5c-937d-baaa2ee605be")
 		(at 134.1 90.713 180)
@@ -9720,7 +9720,7 @@
 			(uuid "f6e6c60b-6ae8-43cb-919f-338ec5c31a2d")
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/BM03B-SRSS-TB_LF_SN/BM03B-SRSS-TB-LF__SN.STEP"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/BM03B-SRSS-TB.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -9732,7 +9732,7 @@
 			)
 		)
 	)
-	(footprint "Personal Library:NR4018"
+	(footprint "NanoPage:NR4018"
 		(layer "F.Cu")
 		(uuid "72504659-7141-4e85-acf5-f3e619c7d9eb")
 		(at 167.75 110.75 -90)
@@ -9890,7 +9890,7 @@
 			(uuid "ba55d66a-5bb1-4fe3-9a16-e023a75d5c41")
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/3D models/NR4018.step"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/NR4018.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -10586,7 +10586,7 @@
 			)
 		)
 	)
-	(footprint "TPS2116DRL:SOTFL50P160X60-8N"
+	(footprint "NanoPage:SOTFL50P160X60-8N"
 		(layer "F.Cu")
 		(uuid "76e3671d-45a9-42b7-9f8f-4e97a6e4a3a8")
 		(at 160.6 99.1)
@@ -11012,7 +11012,7 @@
 			(uuid "f6946b1d-00de-4cf6-b5f7-93093c696e7d")
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/TPS2116DRLR/TPS2116DRLR.step"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/TPS2116DRLR.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -12050,7 +12050,7 @@
 		)
 		(embedded_fonts no)
 	)
-	(footprint "PTS526SM15SMTR2:PTS526SM15SMTR2LFS"
+	(footprint "NanoPage:PTS526SM15SMTR2LFS"
 		(layer "F.Cu")
 		(uuid "8a631b76-6ef4-4c5b-9d5b-794673b9f7a6")
 		(at 132.1 102.5)
@@ -12437,7 +12437,7 @@
 			(uuid "dddfea4b-26a4-4bba-8905-ad061387d3af")
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/PTS526SM15SMTR2_LFS/PTS526SM15SMTR2_LFS.stp"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/PTS526SM15SMTR2.step"
 			(offset
 				(xyz 0 0 0.04999999999)
 			)
@@ -14596,7 +14596,7 @@
 			)
 		)
 	)
-	(footprint "SKRTLAE010:SKRTLAE010"
+	(footprint "NanoPage:SKRTLAE010"
 		(locked yes)
 		(layer "F.Cu")
 		(uuid "a25a6009-85eb-4f86-bda4-34b2813e4309")
@@ -14987,7 +14987,7 @@
 			(uuid "e1d53b19-9cde-4931-9bc6-8585df36964e")
 		)
 		(embedded_fonts no)
-		(model "SKRTLAE010.stp"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/SKRTLAE010.step"
 			(offset
 				(xyz 0.03 -0.5 1.73)
 			)
@@ -18606,7 +18606,7 @@
 			)
 		)
 	)
-	(footprint "TYPE-C-31-M-12:HRO_TYPE-C-31-M-12"
+	(footprint "NanoPage:HRO_TYPE-C-31-M-12"
 		(locked yes)
 		(layer "F.Cu")
 		(uuid "e75a5c53-1e20-4af2-9f7d-a35a65590eaa")
@@ -19340,7 +19340,7 @@
 			(uuid "53830a50-4ece-47bd-b19a-57ba55413757")
 		)
 		(embedded_fonts no)
-		(model "/home/vagarth/Applications/Kicad/external_libraries/TYPE-C-31-M-12/TYPE-C-31-M-12.step"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/TYPE-C-31-M-12.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -20272,7 +20272,7 @@
 			)
 		)
 	)
-	(footprint "SKRTLAE010:SKRTLAE010"
+	(footprint "NanoPage:SKRTLAE010"
 		(locked yes)
 		(layer "F.Cu")
 		(uuid "f0eb638f-b9d0-4a94-9387-940fa759d4ce")
@@ -20663,7 +20663,7 @@
 			(uuid "517d19df-4e35-422d-8534-58fcbd120979")
 		)
 		(embedded_fonts no)
-		(model "SKRTLAE010.stp"
+		(model "${KIPRJMOD}/libraries/NanoPage.3dshapes/SKRTLAE010.step"
 			(offset
 				(xyz 0.03 -0.5 1.73)
 			)
@@ -21491,7 +21491,7 @@
 			)
 		)
 	)
-	(footprint "Personal Library:BQ25170"
+	(footprint "NanoPage:BQ25170"
 		(layer "F.Cu")
 		(uuid "faa9594e-db69-4f73-a5bc-1bf6d1dd0707")
 		(at 167.95 102.05)

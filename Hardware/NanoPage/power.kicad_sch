@@ -1444,7 +1444,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "TPS2116:TPS2116DRLR"
+		(symbol "NanoPage:TPS2116DRLR"
 			(pin_names
 				(offset 1.016)
 			)
@@ -1475,7 +1475,7 @@
 					(justify left bottom)
 				)
 			)
-			(property "Footprint" "TPS2116:SOTFL50P160X60-8N"
+			(property "Footprint" "NanoPage:SOTFL50P160X60-8N"
 				(at 5.08 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -1816,7 +1816,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "TYPE-C-31-M-12:TYPE-C-31-M-12"
+		(symbol "NanoPage:TYPE-C-31-M-12"
 			(pin_names
 				(offset 1.016)
 			)
@@ -1845,7 +1845,7 @@
 					)
 				)
 			)
-			(property "Footprint" "TYPE-C-31-M-12:HRO_TYPE-C-31-M-12"
+			(property "Footprint" "NanoPage:HRO_TYPE-C-31-M-12"
 				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
@@ -2340,7 +2340,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "personal-library:TPS7A02"
+		(symbol "NanoPage:TPS7A02"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -4312,7 +4312,7 @@
 		)
 	)
 	(symbol
-		(lib_id "TPS2116:TPS2116DRLR")
+		(lib_id "NanoPage:TPS2116DRLR")
 		(at 121.92 52.07 0)
 		(unit 1)
 		(body_style 1)
@@ -4343,7 +4343,7 @@
 				)
 			)
 		)
-		(property "Footprint" "TPS2116DRL:SOTFL50P160X60-8N"
+		(property "Footprint" "NanoPage:SOTFL50P160X60-8N"
 			(at 121.92 52.07 0)
 			(hide yes)
 			(show_name no)
@@ -4876,7 +4876,7 @@
 		)
 	)
 	(symbol
-		(lib_id "personal-library:TPS7A02")
+		(lib_id "NanoPage:TPS7A02")
 		(at 181.61 45.72 0)
 		(unit 1)
 		(body_style 1)
@@ -5383,7 +5383,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Personal Library:L_CommonModeChoke_TDK_0503USB"
+		(property "Footprint" "NanoPage:L_CommonModeChoke_TDK_0503USB"
 			(at 170.18 156.21 0)
 			(hide yes)
 			(show_name no)
@@ -5596,7 +5596,7 @@
 		)
 	)
 	(symbol
-		(lib_id "TYPE-C-31-M-12:TYPE-C-31-M-12")
+		(lib_id "NanoPage:TYPE-C-31-M-12")
 		(at 100.33 132.08 0)
 		(unit 1)
 		(body_style 1)
@@ -5626,7 +5626,7 @@
 				)
 			)
 		)
-		(property "Footprint" "TYPE-C-31-M-12:HRO_TYPE-C-31-M-12"
+		(property "Footprint" "NanoPage:HRO_TYPE-C-31-M-12"
 			(at 100.33 132.08 0)
 			(hide yes)
 			(show_name no)
