@@ -47,6 +47,11 @@
  */
 #define APP_COMPANION_ADV_TIMEOUT_SEC 120
 
+/* How long advertising continues after a paired phone disconnects, before the
+ * radio is switched back off.
+ */
+#define APP_COMPANION_READVERTISE_SEC 60
+
 /* --- Fuel gauge / charging (fuel_gauge.c) --- */
 
 #define APP_CHARGE_COMPLETE_VOLTAGE_MV 4100

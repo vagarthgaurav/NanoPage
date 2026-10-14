@@ -207,9 +207,11 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	k_spinlock_key_t key;
 	bool ours;
 	bool is_active;
+	bool was_secured;
 
 	key = k_spin_lock(&lock);
 	ours = (cur_conn == conn);
+	was_secured = (state == APP_COMPANION_STATE_CONNECTED);
 	if (ours) {
 		bt_conn_unref(cur_conn);
 		cur_conn = NULL;
@@ -229,7 +231,13 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 	if (is_active) {
 		publish_active(APP_COMPANION_STATE_ADVERTISING, 0);
-		restart_timeout_window();
+
+		/* After an established session the phone only gets a short window
+		 * to come back; a link that never finished pairing gets the full one.
+		 */
+		k_work_reschedule(&timeout_work, K_SECONDS(was_secured
+								   ? APP_COMPANION_READVERTISE_SEC
+								   : APP_COMPANION_ADV_TIMEOUT_SEC));
 	}
 }
 
