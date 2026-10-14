@@ -13,6 +13,7 @@ target_sources(app PRIVATE
 	src/drivers/buttons.c
 	src/drivers/i2c1_bus.c
 	src/display/display.c
+	src/display/ssd1680.c
 	src/display/logo_nanopage.c
 	src/ui/text.c
 	src/ui/list_widget.c

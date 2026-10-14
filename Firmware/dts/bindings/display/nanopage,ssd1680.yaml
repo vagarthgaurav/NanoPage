@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Deliberately a separate compatible from upstream's "solomon,ssd1680" -
+# this board uses a local copy of the driver (src/display/ssd1680.c), not
+# Zephyr's in-tree one. Reason: the in-tree driver's init() ends with a
+# full panel refresh, which flashes the panel white on every boot and
+# wipes the sleep screen after waking from System OFF; the app issues
+# its own first refresh instead. All properties come from upstream's
+# common SSD16xx binding.
+
+description: SSD1680 e-paper controller, no refresh at init (NanoPage board)
+
+compatible: "nanopage,ssd1680"
+
+include: solomon,ssd16xx-common.yaml

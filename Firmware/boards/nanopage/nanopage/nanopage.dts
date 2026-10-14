@@ -95,12 +95,12 @@
 
 	/*
 	 * GDEY029T94 e-paper panel (128x296, SSD1680 controller) on spi3,
-	 * CS index 0 there (see cs-gpios on &spi3 below). Zephyr's in-tree
-	 * SSD16XX driver talks to it over the generic MIPI DBI Mode C
-	 * (4-wire SPI) bridge, so the actual SPI bus is wrapped in a
-	 * zephyr,mipi-dbi-spi node that owns the DC/reset lines; reg = <0>
-	 * on the panel node below selects cs-gpios[0] on spi3 through
-	 * that wrapper.
+	 * CS index 0 there (see cs-gpios on &spi3 below). The local
+	 * SSD1680 driver (src/display/ssd1680.c) talks to it over the
+	 * generic MIPI DBI Mode C (4-wire SPI) bridge, so the actual SPI
+	 * bus is wrapped in a zephyr,mipi-dbi-spi node that owns the
+	 * DC/reset lines; reg = <0> on the panel node below selects
+	 * cs-gpios[0] on spi3 through that wrapper.
 	 */
 	display_mipi: display-mipi {
 		compatible = "zephyr,mipi-dbi-spi";
@@ -111,7 +111,7 @@
 		#size-cells = <0>;
 
 		epd_panel: ssd1680@0 {
-			compatible = "solomon,ssd1680";
+			compatible = "nanopage,ssd1680";
 			reg = <0>;
 			mipi-max-frequency = <4000000>;
 			/*
@@ -128,7 +128,7 @@
 			 * the device is actually held - the natural mounting
 			 * orientation is upside down relative to the driver's
 			 * default. ROTATED_180 stays on the same code path as
-			 * NORMAL in ssd16xx.c (x/y resolution and the vtiled
+			 * NORMAL in ssd1680.c (x/y resolution and the vtiled
 			 * buffer layout are unchanged, just the RAM scan
 			 * direction flips) - unlike 90/270, which would swap
 			 * width/height and drop the vtiled layout text.c
@@ -142,8 +142,8 @@
 			 * waveform. Empty on purpose: this chip's OTP
 			 * already stores both the full and Mode 2 waveforms,
 			 * selected purely via an UPDATE_CTRL2 register bit
-			 * (see quirks_solomon_ssd1680.ctrl2_partial in
-			 * ssd16xx.c) - no custom LUT bytes needed. Presence
+			 * (see quirks_nanopage_ssd1680.ctrl2_partial in
+			 * ssd1680.c) - no custom LUT bytes needed. Presence
 			 * of this node is what the driver checks, per its
 			 * SSD16XX_DEFINE()/DT_CHILD(n, partial) macro.
 			 */
