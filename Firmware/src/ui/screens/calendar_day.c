@@ -482,18 +482,24 @@ static void on_hold(enum app_button button)
 	}
 }
 
-void app_calendar_day_show(void (*on_exit)(void))
+/* Reads the grid size and derives the content rows, minus the blank margin rows. */
+static void setup_layout(void)
 {
 	uint16_t rows;
-	int ret;
-
-	exit_cb = on_exit;
 
 	app_text_get_grid(&grid_cols, &rows);
 	app_text_get_content_rows(&content_start_row, &content_rows);
 	content_start_row += APP_CALENDAR_MARGIN_ROWS;
 	content_rows -= 2 * APP_CALENDAR_MARGIN_ROWS;
+}
 
+void app_calendar_day_show(void (*on_exit)(void))
+{
+	int ret;
+
+	exit_cb = on_exit;
+
+	setup_layout();
 	read_today();
 
 	/* On any error the store leaves nothing loaded: show an empty calendar. */
@@ -506,6 +512,31 @@ void app_calendar_day_show(void (*on_exit)(void))
 	app_buttons_set_press_callback(on_button);
 	app_buttons_set_hold_callback(on_hold);
 	calendar_active = true;
+}
+
+void app_calendar_day_draw_snapshot(void)
+{
+	int ret;
+
+	setup_layout();
+	read_today();
+
+	ret = app_calendar_store_load();
+	printk("calendar: snapshot load %d\n", ret);
+
+	day_offset = 0;
+	render_day();
+
+	/* Nobody can move a cursor on a static snapshot, so drop the selection icon. */
+	for (uint16_t i = 0; i < list.content_rows; i++) {
+		uint16_t row = (uint16_t)(list.content_start_row + i);
+
+		app_text_draw_cell(row, APP_CALENDAR_CURSOR_COL, ' ');
+		app_text_draw_cell(row, APP_CALENDAR_CURSOR_COL + 1, ' ');
+	}
+
+	/* The now line cap lives in the cursor columns, which the blanking just erased. */
+	draw_now_line();
 }
 
 bool app_calendar_day_is_active(void)

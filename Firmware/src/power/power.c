@@ -12,9 +12,9 @@
 
 #include "config.h"
 #include "display.h"
-#include "logo_nanopage.h"
 #include "rtc.h"
 #include "sd.h"
+#include "sleep_screen.h"
 
 static const struct gpio_dt_spec wake_buttons[] = {
 	GPIO_DT_SPEC_GET(DT_ALIAS(sw_action), gpios),
@@ -66,7 +66,11 @@ void app_power_cancel_idle_sync(void)
 
 static void show_sleep_message(void)
 {
-	app_display_refresh_full(app_logo_nanopage, sizeof(app_logo_nanopage));
+	int ret = app_sleep_screen_show();
+
+	if (ret) {
+		printk("power: sleep screen failed (%d)\n", ret);
+	}
 }
 
 static void enter_system_off(void)

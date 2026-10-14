@@ -47,6 +47,8 @@ int app_text_draw_icon(uint16_t row, uint16_t x, enum app_text_icon icon);
 
 int app_text_draw_battery(uint16_t row, uint16_t x, enum app_text_battery icon);
 
+int app_text_draw_bitmap(uint16_t row, uint16_t x, uint16_t width, const uint8_t *data);
+
 int app_text_set_cursor(uint16_t row, uint16_t col, bool visible);
 
 int app_text_draw_hline(uint16_t row, uint16_t y_in_row, bool black);

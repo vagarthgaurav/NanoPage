@@ -10,6 +10,11 @@ void app_calendar_day_show(void (*on_exit)(void));
 
 bool app_calendar_day_is_active(void);
 
+/* Draws today's day view into the text framebuffer, without cursor, button
+ * callbacks or any flush/refresh. The caller flushes. Does not mark the view active.
+ */
+void app_calendar_day_draw_snapshot(void);
+
 /* Format the viewed day as "Www, MM-DD-YY" into buf (needs at least 14 bytes).
  * Returns 0 on success, negative errno on failure.
  */

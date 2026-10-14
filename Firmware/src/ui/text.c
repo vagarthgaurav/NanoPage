@@ -312,6 +312,24 @@ int app_text_draw_battery(uint16_t row, uint16_t x, enum app_text_battery icon)
 	return draw_icon_glyph(&font_battery_icons, (unsigned char)icon, row, x);
 }
 
+int app_text_draw_bitmap(uint16_t row, uint16_t x, uint16_t width, const uint8_t *data)
+{
+	uint16_t row_height = font_entry(cur_font)->height;
+	uint16_t py = row * row_height;
+
+	if (!fb_buf || row >= grid_rows || x + width > fb_width) {
+		return -EINVAL;
+	}
+
+	for (uint16_t page = 0; page < row_height / 8; page++) {
+		memcpy(&fb_buf[(py / 8 + page) * fb_pitch + x], &data[page * width], width);
+	}
+
+	mark_dirty_px(py, row_height, x, x + width);
+
+	return 0;
+}
+
 uint16_t app_text_col_to_px(uint16_t col)
 {
 	return col * font_entry(cur_font)->width;
