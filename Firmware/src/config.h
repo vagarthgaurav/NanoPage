@@ -12,8 +12,6 @@
 
 #define APP_STATUS_REFRESH_INTERVAL_SEC 30
 
-#define APP_STATUS_CURRENT_SAMPLE_LEAD_SEC 10
-
 /* --- File browser (browser.c) --- */
 
 #define APP_BROWSER_FULL_REFRESH_EVERY 10

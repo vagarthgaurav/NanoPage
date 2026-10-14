@@ -28,8 +28,7 @@
 
 #define HEADER_FOLDER_FALLBACK "(no SD card)"
 
-static struct k_work_delayable footer_sample_work;
-static struct k_work_delayable footer_draw_work;
+static struct k_work_delayable fuel_gauge_save_work;
 
 static void on_header_event(void)
 {
@@ -73,29 +72,15 @@ static void on_header_event(void)
 	}
 }
 
-static void footer_draw_handler(struct k_work *work)
+static void fuel_gauge_save_handler(struct k_work *work)
 {
 	ARG_UNUSED(work);
-
-	if (!app_usb_msc_is_active()) {
-		app_footer_draw();
-		app_text_flush();
-	}
 
 	if (app_fuel_gauge_should_save_learned_params()) {
 		app_fuel_gauge_save_learned_params();
 	}
 
-	k_work_schedule(&footer_sample_work,
-			K_SECONDS(APP_STATUS_REFRESH_INTERVAL_SEC - APP_STATUS_CURRENT_SAMPLE_LEAD_SEC));
-}
-
-static void footer_sample_handler(struct k_work *work)
-{
-	ARG_UNUSED(work);
-
-	app_footer_sample_current();
-	k_work_schedule(&footer_draw_work, K_SECONDS(APP_STATUS_CURRENT_SAMPLE_LEAD_SEC));
+	k_work_schedule(&fuel_gauge_save_work, K_SECONDS(APP_STATUS_REFRESH_INTERVAL_SEC));
 }
 
 int main(void)
@@ -115,7 +100,6 @@ int main(void)
 	if (app_text_init(APP_TEXT_FONT_TAMZEN) == 0) {
 		app_footer_init();
 
-		app_footer_sample_current();
 		app_footer_draw();
 
 		if (!app_power_woke_from_system_off() ||
@@ -127,11 +111,8 @@ int main(void)
 			printk("main: USB Mass Storage init failed\n");
 		}
 
-		k_work_init_delayable(&footer_sample_work, footer_sample_handler);
-		k_work_init_delayable(&footer_draw_work, footer_draw_handler);
-		k_work_schedule(&footer_sample_work,
-				K_SECONDS(APP_STATUS_REFRESH_INTERVAL_SEC -
-					  APP_STATUS_CURRENT_SAMPLE_LEAD_SEC));
+		k_work_init_delayable(&fuel_gauge_save_work, fuel_gauge_save_handler);
+		k_work_schedule(&fuel_gauge_save_work, K_SECONDS(APP_STATUS_REFRESH_INTERVAL_SEC));
 
 		struct rtc_time minute_tick = {.tm_sec = 0};
 

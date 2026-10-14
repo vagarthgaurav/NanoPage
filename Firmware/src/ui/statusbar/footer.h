@@ -7,8 +7,6 @@
 
 void app_footer_init(void);
 
-void app_footer_sample_current(void);
-
 int app_footer_draw(void);
 
 #endif /* APP_FOOTER_H_ */
